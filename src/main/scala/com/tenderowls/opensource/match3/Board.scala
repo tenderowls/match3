@@ -15,7 +15,7 @@ object Board {
 
   sealed trait BoardOperation
   case class Transition(from:Point, to:Point) extends BoardOperation
-  case class Update(position:Point, cell:Cell) extends BoardOperation
+  case class Update(position:Point, value:Cell) extends BoardOperation
 
   trait Cell {
     def matchWith(x: Cell) = {
@@ -26,7 +26,7 @@ object Board {
 
   case class EmptyCell() extends Cell {
     override def matchWith(x: Cell) = false
-    override def toString = "* "
+    override def toString = "*"
   }
 
   case class BadCell() extends Cell {
@@ -58,7 +58,7 @@ object Board {
     }
   }
 
-  implicit class BoardMethods(val board: Board)(implicit rules: Rules) {
+  implicit class BoardMethods(val board: Board)(implicit val rules: Rules) {
 
     private type Inc = Int => Int
 
@@ -189,6 +189,23 @@ object Board {
         matched => Update(matched.position, EmptyCell())
       }
       updateOps ++ transitionOps.flatten
+    }
+
+    def applyOperations(operations:List[BoardOperation]) = {
+      @tailrec
+      def mutateCellAt(point:Point, list:List[BoardOperation]):Cell = list match {
+        case x :: xs =>
+          x match {
+            case Transition(from, `point`) => getUnsafe(from.x, from.y)
+            case Transition(`point`, _) => EmptyCell()
+            case Update(`point`, value) => value
+            case _ => mutateCellAt(point, xs)
+          }
+        case _ => getUnsafe(point.x, point.y)
+      }
+      val reverseOperations = operations.reverse
+      val cells = foreach((point, i) => mutateCellAt(point, reverseOperations))
+      cells.toVector
     }
 
     def stringify = {

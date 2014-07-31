@@ -34,6 +34,13 @@ object BoardSpec extends Specification {
     More complex cases. Board winth 'bad cells'
 
       Three vertical cells and 'bad cell' upwards to sequence   $testSequenceOperationsCalculator3
+      TODO Physics
+
+    Apply operations tests
+
+      Sequence of four vertical cells           $testApplyOperations1
+      Sequence of five horizontal cells         $testApplyOperations2
+      Sequence of three vertical and bad cell   $testApplyOperations3
   """
 
   def horizontalMatch =
@@ -187,4 +194,80 @@ object BoardSpec extends Specification {
     )
   }
 
+  def testApplyOperations(board:BoardMethods, expect:BoardMethods) = {
+    implicit val rules = board.rules
+    val seq = board.matchedSequence.get
+    val ops = board.calculateRemoveSequenceOperations(seq)
+    val newBoard = board.applyOperations(ops)
+    newBoard.stringify mustEqual expect.stringify
+  }
+
+  def testApplyOperations1 = testApplyOperations(
+    board = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 3 4 5 6 7 8
+      8 7 9 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 9 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """,
+    expect = board"""
+      1 2 * 4 5 6 7 8
+      8 7 * 5 4 3 2 1
+      1 2 * 4 5 6 7 8
+      8 7 * 5 4 3 2 1
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """
+  )
+
+  def testApplyOperations2 = testApplyOperations(
+    board = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 3 4 5 6 7 8
+      8 7 8 9 9 9 9 9
+      1 2 7 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 5 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """,
+    expect = board"""
+      1 2 3 * * * * *
+      8 7 6 4 5 6 7 8
+      1 2 3 5 4 3 2 1
+      8 7 8 4 5 6 7 8
+      1 2 7 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 5 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """
+  )
+
+  def testApplyOperations3 = testApplyOperations(
+    board = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 _ 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 9 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """,
+    expect = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 _ 4 5 6 7 8
+      8 7 * 5 4 3 2 1
+      1 2 * 4 5 6 7 8
+      8 7 * 5 4 3 2 1
+      1 2 6 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """
+  )
 }
