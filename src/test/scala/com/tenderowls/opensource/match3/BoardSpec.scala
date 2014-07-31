@@ -85,6 +85,19 @@ object BoardSpec extends Specification {
     )
   }
 
+  def separateOps(ops:List[BoardOperation]) = {
+    val updates = ops filter {
+      case x: Update => true
+      case _ => false
+    }
+
+    val transitions = ops filter {
+      case x: Transition => true
+      case _ => false
+    }
+    (updates.toSet, transitions)
+  }
+
   def testSequenceOperationsCalculator1 = {
 
     val board = board"""
@@ -99,11 +112,16 @@ object BoardSpec extends Specification {
     """
 
     val seq = board.matchedSequence.get
-    board.calculateRemoveSequenceOperations(seq).toSet mustEqual Set(
+    val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
+
+    ops._1 mustEqual Set(
       Update(Point(2, 3), EmptyCell()),
       Update(Point(2, 4), EmptyCell()),
       Update(Point(2, 5), EmptyCell()),
-      Update(Point(2, 6), EmptyCell()),
+      Update(Point(2, 6), EmptyCell())
+    )
+
+    ops._2 mustEqual List(
       Transition(Point(2, 2), Point(2, 6)),
       Transition(Point(2, 1), Point(2, 5)),
       Transition(Point(2, 0), Point(2, 4))
@@ -124,16 +142,21 @@ object BoardSpec extends Specification {
     """
 
     val seq = board.matchedSequence.get
-    board.calculateRemoveSequenceOperations(seq).toSet mustEqual Set(
+    val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
+
+    ops._1 mustEqual Set(
       Update(Point(3, 2), EmptyCell()),
       Update(Point(4, 2), EmptyCell()),
-      Update(Point(5, 2), EmptyCell()),
-      Transition(Point(3, 0), Point(3, 1)),
-      Transition(Point(3, 1), Point(3, 2)),
-      Transition(Point(4, 0), Point(4, 1)),
-      Transition(Point(4, 1), Point(4, 2)),
+      Update(Point(5, 2), EmptyCell())
+    )
+
+    ops._2 mustEqual List(
+      Transition(Point(5, 1), Point(5, 2)),
       Transition(Point(5, 0), Point(5, 1)),
-      Transition(Point(5, 1), Point(5, 2))
+      Transition(Point(4, 1), Point(4, 2)),
+      Transition(Point(4, 0), Point(4, 1)),
+      Transition(Point(3, 1), Point(3, 2)),
+      Transition(Point(3, 0), Point(3, 1))
     )
   }
 
@@ -151,11 +174,15 @@ object BoardSpec extends Specification {
     """
 
     val seq = board.matchedSequence.get
+    val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
 
-    board.calculateRemoveSequenceOperations(seq).toSet mustEqual Set(
+    ops._1 mustEqual Set(
       Update(Point(2, 4), EmptyCell()),
       Update(Point(2, 5), EmptyCell()),
-      Update(Point(2, 6), EmptyCell()),
+      Update(Point(2, 6), EmptyCell())
+    )
+
+    ops._2 mustEqual List(
       Transition(Point(2, 3), Point(2, 6))
     )
   }
