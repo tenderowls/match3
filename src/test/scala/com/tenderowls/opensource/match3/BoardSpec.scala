@@ -2,7 +2,6 @@ package com.tenderowls.opensource.match3
 
 import com.tenderowls.opensource.match3.Board._
 import com.tenderowls.opensource.match3.BoardGenerator._
-
 import org.specs2._
 
 import scala.util.Random
@@ -12,53 +11,36 @@ import scala.util.Random
  */
 object BoardSpec extends Specification {
 
-  implicit object rules extends Rules {
-    val rnd = new Random()
-    override val width: Int = 8
-    override val height: Int = 8
-    override def randomValue: Cell = {
-      IntCell(rnd.nextInt(6))
-    }
-  }
+  val rnd = new Random()
+
+  implicit val rndValue = () => IntCell(rnd.nextInt(6))
 
   def is = s2"""
 
-    Check board generator
-
-      simple board            $simpleBoard
-      board 2d                $board2d
-
     Board matching
 
-      simple match 3 horizontal in a simple one dimension board           $horizontalMatch
-      match 5 vertical                                                    $verticalMatch
-      match 3 vertical and horizontal                                     $doubleMatch
+      Simple match 3 horizontal in a simple one dimension board           $horizontalMatch
+      Match 5 vertical                                                    $verticalMatch
+      Match 3 vertical and horizontal                                     $doubleMatch
+
+    When sequence was matched we need to find new state of board.
+    There is several reasons (like animation on a client side,
+    or client-server messaging) to calculate new board state
+    incrementally
+
+      Sequence of four vertical cells           $testSequenceOperationsCalculator1
+      Sequence of three horizontal cells        $testSequenceOperationsCalculator2
+
+    More complex cases. Board winth 'bad cells'
+
+      Three vertical cells and 'bad cell' upwards to sequence   $testSequenceOperationsCalculator3
   """
-
-  def simpleBoard = board"0 0 1".board mustEqual Vector(
-    IntCell(0),
-    IntCell(0),
-    IntCell(1)
-  )
-
-  def board2d = {
-    val board = board"""
-      0 0 1
-      * * 0
-      0 0 _
-      """
-    board.board mustEqual Vector(
-      IntCell(0), IntCell(0), IntCell(1),
-      EmptyCell(), EmptyCell(), IntCell(0),
-      IntCell(0), IntCell(0), BadCell()
-    )
-  }
 
   def horizontalMatch =
     board"0 0 1 1 2 2 2 0".matchedSequence.get.toSet mustEqual Set(
-      MatchedCell(6, 0, IntCell(2)),
-      MatchedCell(5, 0, IntCell(2)),
-      MatchedCell(4, 0, IntCell(2))
+      MatchedCell(Point(6, 0), IntCell(2)),
+      MatchedCell(Point(5, 0), IntCell(2)),
+      MatchedCell(Point(4, 0), IntCell(2))
     )
 
   def verticalMatch = {
@@ -72,11 +54,11 @@ object BoardSpec extends Specification {
     """
 
     board.matchedSequence.get.toSet mustEqual Set(
-      MatchedCell(2, 0, IntCell(1)),
-      MatchedCell(2, 1, IntCell(1)),
-      MatchedCell(2, 2, IntCell(1)),
-      MatchedCell(2, 3, IntCell(1)),
-      MatchedCell(2, 4, IntCell(1))
+      MatchedCell(Point(2, 0), IntCell(1)),
+      MatchedCell(Point(2, 1), IntCell(1)),
+      MatchedCell(Point(2, 2), IntCell(1)),
+      MatchedCell(Point(2, 3), IntCell(1)),
+      MatchedCell(Point(2, 4), IntCell(1))
     )
   }
 
@@ -91,17 +73,91 @@ object BoardSpec extends Specification {
     val sequences = board.matchedSequences().toSet
     sequences.map(_.toSet) mustEqual Set(
       Set(
-        MatchedCell(0, 0, IntCell(1)),
-        MatchedCell(0, 1, IntCell(1)),
-        MatchedCell(0, 2, IntCell(1))
+        MatchedCell(Point(0, 0), IntCell(1)),
+        MatchedCell(Point(0, 1), IntCell(1)),
+        MatchedCell(Point(0, 2), IntCell(1))
       ),
       Set(
-        MatchedCell(0, 0, IntCell(1)),
-        MatchedCell(1, 0, IntCell(1)),
-        MatchedCell(2, 0, IntCell(1))
+        MatchedCell(Point(0, 0), IntCell(1)),
+        MatchedCell(Point(1, 0), IntCell(1)),
+        MatchedCell(Point(2, 0), IntCell(1))
       )
     )
   }
 
+  def testSequenceOperationsCalculator1 = {
+
+    val board = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 3 4 5 6 7 8
+      8 7 9 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 9 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """
+
+    val seq = board.matchedSequence.get
+    board.calculateRemoveSequenceOperations(seq).toSet mustEqual Set(
+      Update(Point(2, 3), EmptyCell()),
+      Update(Point(2, 4), EmptyCell()),
+      Update(Point(2, 5), EmptyCell()),
+      Update(Point(2, 6), EmptyCell()),
+      Transition(Point(2, 2), Point(2, 6)),
+      Transition(Point(2, 1), Point(2, 5)),
+      Transition(Point(2, 0), Point(2, 4))
+    )
+  }
+
+  def testSequenceOperationsCalculator2 = {
+
+    val board = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 2 2 1
+      1 2 1 3 3 3 7 8
+      8 7 6 5 4 2 2 1
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """
+
+    val seq = board.matchedSequence.get
+    board.calculateRemoveSequenceOperations(seq).toSet mustEqual Set(
+      Update(Point(3, 2), EmptyCell()),
+      Update(Point(4, 2), EmptyCell()),
+      Update(Point(5, 2), EmptyCell()),
+      Transition(Point(3, 0), Point(3, 1)),
+      Transition(Point(3, 1), Point(3, 2)),
+      Transition(Point(4, 0), Point(4, 1)),
+      Transition(Point(4, 1), Point(4, 2)),
+      Transition(Point(5, 0), Point(5, 1)),
+      Transition(Point(5, 1), Point(5, 2))
+    )
+  }
+
+  def testSequenceOperationsCalculator3 = {
+
+    val board = board"""
+      1 2 3 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 _ 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 9 5 4 3 2 1
+      1 2 9 4 5 6 7 8
+      8 7 6 5 4 3 2 1
+    """
+
+    val seq = board.matchedSequence.get
+
+    board.calculateRemoveSequenceOperations(seq).toSet mustEqual Set(
+      Update(Point(2, 4), EmptyCell()),
+      Update(Point(2, 5), EmptyCell()),
+      Update(Point(2, 6), EmptyCell()),
+      Transition(Point(2, 3), Point(2, 6))
+    )
+  }
 
 }

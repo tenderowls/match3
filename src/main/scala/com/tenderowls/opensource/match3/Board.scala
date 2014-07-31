@@ -7,9 +7,15 @@ import scala.annotation.tailrec
  */
 object Board {
 
+  case class Point(x:Int, y:Int)
+
   sealed trait Direction
   case class Horizontal() extends Direction
   case class Vertical() extends Direction
+
+  sealed trait BoardOperation
+  case class Transition(from:Point, to:Point) extends BoardOperation
+  case class Update(position:Point, cell:Cell) extends BoardOperation
 
   trait Cell {
     def matchWith(x: Cell) = {
@@ -28,7 +34,7 @@ object Board {
     override def toString = " "
   }
   
-  case class MatchedCell(x:Int, y:Int, value:Cell)
+  case class MatchedCell(position:Point, value:Cell)
 
   abstract class Rules {
     def randomValue: Cell
@@ -54,28 +60,29 @@ object Board {
 
   implicit class BoardMethods(val board: Board)(implicit rules: Rules) {
 
-    val range = 0 until board.length
-
-    private def calcY(index:Int) = index / rules.width
-
-    private def calcX(index:Int) = index % rules.width
-
-    private def getUnsafe(x:Int, y:Int) = board(x + y * rules.width)
-
-    private type Result = List[MatchedCell]
-
     private type Inc = Int => Int
 
-    @tailrec private def sequenceInternal(lst:Result, nx:Inc, ny:Inc):Result = {
+    private def foreach[T](f: (Point, Int) => T, brd:Board = board) = {
+      val range = 0 until brd.length
+      range.view map {
+        i => f( Point(i % rules.width, i / rules.width), i)
+      }
+    }
+
+    @tailrec
+    private def genSeq(lst:List[MatchedCell],
+                                nx:Inc = x => x, ny:Inc = y => y):List[MatchedCell] = {
       val prev = lst.head
-      val x = nx(prev.x)
-      val y = ny(prev.y)
+      val x = nx(prev.position.x)
+      val y = ny(prev.position.y)
       apply(x, y) match {
         case Some(next) if prev.value matchWith next =>
-          sequenceInternal(MatchedCell(x, y, next) :: lst, nx, ny)
+          genSeq(MatchedCell(Point(x, y), next) :: lst, nx, ny)
         case _ => lst
       }
     }
+
+    private def getUnsafe(x:Int, y:Int, brd:Board = board) = brd(x + y * rules.width)
 
     def apply(x: Int, y: Int) = {
       if (x >= rules.width || y >= rules.height) {
@@ -97,14 +104,15 @@ object Board {
       matchedSequences().toList match {
         case Nil => board
         case sequences =>
-          val replace = sequences.map(sequence => sequence.head).groupBy( cell => (cell.x, cell.y) )
-          val newBoard = range.view map { i =>
-            val aX = calcX(i)
-            val aY = calcY(i)
-            replace.get(aX, aY) match {
-              case Some(_) => rules.randomValue
-              case None => getUnsafe(aX, aY)
-            }
+          val replace = sequences.map(sequence => sequence.head).groupBy {
+            cell => (cell.position.x, cell.position.y)
+          }
+          val newBoard = foreach {
+            case (Point(x, y), i) =>
+              replace.get(x, y) match {
+                case Some(_) => rules.randomValue
+                case None => board(i)
+              }
           }
           newBoard.toVector.stable
       }
@@ -116,16 +124,15 @@ object Board {
      * @return
      */
     def matchedSequences(startLength: Int = 3) = {
-      val view = range.view
       // Horizontal sequences
-      val rs = view.map { i =>
-        val mr = List(MatchedCell(calcX(i), calcY(i), board(i)))
-        sequenceInternal(mr, x => x + 1, y => y)
+      val rs = foreach { (point, i) =>
+        val mr = List(MatchedCell(point, board(i)))
+        genSeq(mr, nx = x => x + 1)
       }
       // Vertical sequences
-      val bs = view.map { i =>
-        val mr = List(MatchedCell(calcX(i), calcY(i), board(i)))
-        sequenceInternal(mr, x => x, y => y + 1)
+      val bs = foreach { (point, i) =>
+        val mr = List(MatchedCell(point, board(i)))
+        genSeq(mr, ny = y => y + 1)
       }
       val sequences = rs ++ bs
       sequences.filter(_.size >= startLength)
@@ -136,6 +143,53 @@ object Board {
      * @return
      */
     def matchedSequence = matchedSequences().headOption
+
+    def calculateRemoveSequenceOperations(seq:List[MatchedCell]):List[BoardOperation] = {
+      // Create board without cells present in sequence
+      val cleanBoard = foreach { (point, i) =>
+        val exists = seq.exists {
+          case MatchedCell(`point`, _) => true
+          case _ => false
+        }
+        exists match {
+          case true => EmptyCell()
+          case false => board(i)
+        }
+      }.toVector
+      // Calculate cell transition operations
+      val transitionOps = seq filter {
+        // First of all, let's keep only those cells which
+        // don't have empty neighbour to bottom
+        case MatchedCell(Point(x, y), _) =>
+          cleanBoard.apply(x, y + 1) match {
+            case Some(EmptyCell()) => false
+            case _ => true
+          }
+      } map { case MatchedCell(Point(x, y), _) =>
+        // Find top boundary for cell from sequence. It can be
+        // top boundary of board or BadCell
+        val boundary = (-1 to y).reverse find {
+          yy => yy == -1 || getUnsafe(x, yy, cleanBoard) == BadCell()
+        }
+        // Find y coordinates of cells upwards from cell
+        val topYs = ((boundary.get + 1) to y).reverse.filter { yy =>
+          getUnsafe(x, yy, cleanBoard) match {
+            case EmptyCell() => false
+            case _ => true
+          }
+        }
+        0 until topYs.length map {
+          i => Transition(
+            Point(x, topYs(i)),
+            Point(x, y - i)
+          )
+        }
+      }
+      val updateOps = seq map {
+        matched => Update(matched.position, EmptyCell())
+      }
+      updateOps ++ transitionOps.flatten
+    }
 
     def stringify = {
       val s = new StringBuilder()

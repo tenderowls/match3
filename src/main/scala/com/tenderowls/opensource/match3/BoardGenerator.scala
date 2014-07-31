@@ -2,8 +2,6 @@ package com.tenderowls.opensource.match3
 
 import com.tenderowls.opensource.match3.Board._
 
-import scala.util.Random
-
 /**
  * @author Aleksey Fomkin <aleksey.fomkin@gmail.com>
  */
@@ -15,10 +13,11 @@ object BoardGenerator {
     }
   }
 
+  val ValuePattern = "(\\d)".r
+
   implicit class BoardGeneratorInterpolation(val sc: StringContext) extends AnyVal {
 
-    def board(args: Any*): BoardMethods = {
-      val ValuePattern = "(\\d)".r
+    def board(args: Any*)(implicit rndVal: () => Cell): BoardMethods = {
       val s = sc.parts.mkString
       val rows = s.split("\n")
         .map(row => row.trim)
@@ -35,6 +34,7 @@ object BoardGenerator {
             values(x) match {
               case "_" => BadCell()
               case "*" => EmptyCell()
+              case "?" => rndVal()
               case ValuePattern(value) => IntCell(value.toInt)
               case s: String =>
                 val code = s.charAt(0).toByte
@@ -44,10 +44,7 @@ object BoardGenerator {
         }
       val vec = cells.flatten.toVector
       implicit val rules = new Rules {
-        val rnd = new Random()
-        override def randomValue: Cell = {
-          IntCell(rnd.nextInt(6))
-        }
+        override def randomValue: Cell = rndVal()
         override val height: Int = rows.length
         override val width: Int = vec.length / height
       }
