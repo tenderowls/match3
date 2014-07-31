@@ -17,7 +17,7 @@ object BoardGenerator {
 
   implicit class BoardGeneratorInterpolation(val sc: StringContext) extends AnyVal {
 
-    def board(args: Any*)(implicit rndVal: () => Cell): BoardMethods = {
+    def board(args: Any*)(implicit rndVal: () => Cell): Board = {
       val s = sc.parts.mkString
       val rows = s.split("\n")
         .map(row => row.trim)
@@ -42,14 +42,27 @@ object BoardGenerator {
             }
           }
         }
-      val vec = cells.flatten.toVector
-      implicit val rules = new Rules {
+      val data = cells.flatten.toVector
+      val rules = new Rules {
         override def randomValue: Cell = rndVal()
         override val height: Int = rows.length
-        override val width: Int = vec.length / height
+        override val width: Int = data.length / height
       }
-      new BoardMethods(vec)
+      new Board(rules, data)
     }
   }
 
+  def square(makeStable:Boolean = true)(implicit rules: Rules): Board = {
+    val raw =
+      0 until rules.height map { y =>
+        0 until rules.width map { x =>
+          rules.randomValue
+        }
+      }
+    val data = raw.flatten.toVector
+    makeStable match {
+      case true => Board(rules, data).stable
+      case false => Board(rules, data)
+    }
+  }
 }

@@ -25,7 +25,7 @@ object GeneratorSpec extends Specification {
     However there is no more important cases
   """
 
-  def simpleBoard = board"0 0 1".board mustEqual Vector(
+  def simpleBoard = board"0 0 1".data mustEqual Vector(
     IntCell(0),
     IntCell(0),
     IntCell(1)
@@ -37,7 +37,7 @@ object GeneratorSpec extends Specification {
       * * 0
       0 0 _
       """
-    board.board mustEqual Vector(
+    board.data mustEqual Vector(
       IntCell(0), IntCell(0), IntCell(1),
       EmptyCell(), EmptyCell(), IntCell(0),
       IntCell(0), IntCell(0), BadCell()

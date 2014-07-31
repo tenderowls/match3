@@ -194,8 +194,7 @@ object BoardSpec extends Specification {
     )
   }
 
-  def testApplyOperations(board:BoardMethods, expect:BoardMethods) = {
-    implicit val rules = board.rules
+  def testApplyOperations(board:Board, expect:Board) = {
     val seq = board.matchedSequence.get
     val ops = board.calculateRemoveSequenceOperations(seq)
     val newBoard = board.applyOperations(ops)
