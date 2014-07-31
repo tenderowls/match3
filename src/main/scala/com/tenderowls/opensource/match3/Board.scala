@@ -209,17 +209,16 @@ object Board {
     }
 
     def stringify = {
-      val s = new StringBuilder()
-      0 until rules.height map { y =>
+      val s = 0 until rules.height map { y =>
         0 until rules.width map { x =>
           getUnsafe(x, y) match {
-            case BadCell() => s.append("  ")
-            case cell => s.append(cell.toString + " ")
+            case BadCell() => "  "
+            case cell => cell.toString + " "
           }
         }
-        s.append("\n")
+        "\n"
       }
-      s.toString()
+      s.fold("")(_+_)
     }
   }
 }
