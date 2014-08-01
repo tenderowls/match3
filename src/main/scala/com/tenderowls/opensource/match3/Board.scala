@@ -50,7 +50,7 @@ object Board {
 
   def apply(rules:Rules, data:BoardData) = new Board(rules, data) 
   
-  final class Board(val rules:Rules, val data: BoardData) extends Immutable {
+  class Board(val rules:Rules, val data: BoardData) extends Immutable {
 
     private type Inc = Int => Int
 
@@ -62,7 +62,7 @@ object Board {
     }
 
     @tailrec
-    private def genSeq(lst:List[MatchedCell], nx:Inc = x => x, ny:Inc = y => y):List[MatchedCell] = {
+    final private def genSeq(lst:List[MatchedCell], nx:Inc = x => x, ny:Inc = y => y):List[MatchedCell] = {
       val prev = lst.head
       val x = nx(prev.pos.x)
       val y = ny(prev.pos.y)
@@ -72,6 +72,8 @@ object Board {
         case _ => lst
       }
     }
+
+    protected def buildWithData(data:BoardData) = Board(rules, data)
 
     private def getUnsafe(x:Int, y:Int) = data(x + y * rules.width)
 
@@ -87,9 +89,8 @@ object Board {
     }
 
     def fillEmptyCells: Board = {
-      Board(
-        rules = rules,
-        data = data map {
+      buildWithData(
+        data map {
           case EmptyCell() => rules.randomValue
           case x => x
         }
@@ -97,7 +98,7 @@ object Board {
     }
 
     @tailrec
-    def stable: Board = {
+    final def stable: Board = {
       matchedSequences().toList match {
         case Nil => this
         case sequences =>
@@ -111,7 +112,7 @@ object Board {
                 case None => data(i)
               }
           }
-          Board(rules, newBoard.toVector).stable
+          buildWithData(newBoard.toVector).stable
       }
     }
 
@@ -143,8 +144,7 @@ object Board {
 
     def calculateRemoveSequenceOperations(seq:List[MatchedCell]):List[BoardOperation] = {
       // Create board without cells present in sequence
-      val cleanBoard = Board(
-        rules = rules,
+      val cleanBoard = buildWithData(
         foreach { (point, i) =>
           val exists = seq.exists {
             case MatchedCell(`point`, _) => true
@@ -207,7 +207,7 @@ object Board {
       }
       val reverseOperations = operations.reverse
       val cells = foreach((point, i) => mutateCellAt(point, reverseOperations))
-      Board(rules, cells.toVector)
+      buildWithData(cells.toVector)
     }
 
     def stringify = {
