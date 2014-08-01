@@ -50,20 +50,19 @@ object Board {
 
   def apply(rules:Rules, data:BoardData) = new Board(rules, data) 
   
-  final class Board(val rules:Rules, val data: BoardData) {
+  final class Board(val rules:Rules, val data: BoardData) extends Immutable {
 
     private type Inc = Int => Int
 
-    private def foreach[T](f: (Point, Int) => T, brd:BoardData = data) = {
-      val range = 0 until brd.length
+    def foreach[T](f: (Point, Int) => T):Iterable[T] = {
+      val range = 0 until data.length
       range.view map {
         i => f( Point(i % rules.width, i / rules.width), i)
       }
     }
 
     @tailrec
-    private def genSeq(lst:List[MatchedCell],
-                                nx:Inc = x => x, ny:Inc = y => y):List[MatchedCell] = {
+    private def genSeq(lst:List[MatchedCell], nx:Inc = x => x, ny:Inc = y => y):List[MatchedCell] = {
       val prev = lst.head
       val x = nx(prev.pos.x)
       val y = ny(prev.pos.y)
@@ -79,7 +78,7 @@ object Board {
     def get(p:Point):Option[Cell] = get(p.x, p.y)
 
     def get(x: Int, y: Int):Option[Cell] = {
-      if (x >= rules.width || y >= rules.height) {
+      if (x < 0 || y < 0 || x >= rules.width || y >= rules.height) {
         None
       }
       else {

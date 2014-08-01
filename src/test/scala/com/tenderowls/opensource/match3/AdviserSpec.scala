@@ -1,5 +1,6 @@
 package com.tenderowls.opensource.match3
 
+import com.tenderowls.opensource.match3.Board.{Swap, Point}
 import com.tenderowls.opensource.match3.BoardGenerator._
 import com.tenderowls.opensource.match3.BoardAdviser._
 import org.specs2._
@@ -19,15 +20,16 @@ object AdviserSpec extends Specification {
 
     Advices
 
-      0 1 2 3 4 5
-      5 3 3 2 1 0
-      3 1 2 3 4 5
-      5 4 3 2 1 0
-      0 1 2 3 4 5
-
-      This board has five available moves $testAdvices1
-
-
+      1) 0 1 2 3 4 5   2) _ _ _ _ _ 2 _ _
+         5 3 3 2 1 0      _ 3 _ _ _ 2 _ _
+         3 1 2 3 4 5      3 1 _ _ _ 0 2 _
+         5 4 3 2 1 0      _ 3 _ _ _ 2 _ _
+         0 1 2 3 4 5      _ _ _ _ _ 2 _ _
+                          _ _ _ 4 4 4 0 _
+                          _ _ _ _ _ _ 4 _
+                       
+      1) This board has five available moves                                 $testAdvices1
+      2) Best advice for this board (with normal heruistic) is 6,2 to 5,2    $testBestAdviceNormal
   """
 
   def testAdvices1 = {
@@ -40,7 +42,22 @@ object AdviserSpec extends Specification {
       0 1 2 3 4 5
     """
 
-    board.advices.foreach( x => println(x))
-    board.advices.size mustEqual 5
+    board.advices.size mustEqual 8
   }
+
+  def testBestAdviceNormal = {
+
+    val board = board"""
+      _ _ _ _ _ 2 _ _
+      _ 3 _ _ _ 2 _ _
+      3 1 _ _ _ 0 2 _
+      _ 3 _ _ _ 2 _ _
+      _ _ _ _ _ 2 _ _
+      _ _ _ 4 4 4 0 _
+      _ _ _ _ _ _ 4 _
+    """
+
+    board.bestAdvice.get mustEqual Swap(Point(6,2), Point(5, 2))
+  }
+
 }

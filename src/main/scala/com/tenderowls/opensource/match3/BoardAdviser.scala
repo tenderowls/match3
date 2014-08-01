@@ -7,6 +7,10 @@ import com.tenderowls.opensource.match3.Board._
  */
 object BoardAdviser {
 
+  def normalHeuristic(brd:Board, swp:Swap):Int = {
+    brd.applyOperations(List(swp)).matchedSequences().flatten.size
+  }
+
   implicit class BoardAdviserMethods(val board:Board) {
 
     private def f(matched:MatchedCell)(lookup: Point => Point) = {
@@ -16,12 +20,33 @@ object BoardAdviser {
       }
     }
 
-    private def defaultHeuristic(brd:Board, swp:Swap):Int = {
-      brd.applyOperations(List(swp)).matchedSequences().flatten.size
+    def adviceSpecificSequences:Iterable[List[MatchedCell]] = {
+      val raw = board.foreach { (firstPoint:Point, i) =>
+        board.get(firstPoint) match {
+          case Some(firstCell) =>
+            def genSeq(secondPoint:Point):List[MatchedCell] = {
+              board.get(secondPoint) match {
+                case Some(secondCell) =>
+                  firstCell matchWith secondCell match {
+                    case true =>
+                      List(
+                        MatchedCell(secondPoint, secondCell),
+                        MatchedCell(firstPoint, firstCell)
+                      )
+                    case false => List()
+                  }
+                case None => List()
+              }
+            }
+            List(genSeq(firstPoint right 2), genSeq(firstPoint bottom 2))
+          case None => List()
+        }
+      }
+      raw.flatten.filter(_.size == 2)
     }
 
     def advices:Iterable[Swap] = {
-      advices(board.matchedSequences(2))
+      advices(board.matchedSequences(2) ++ adviceSpecificSequences)
     }
 
     def advices(sequences:Iterable[List[MatchedCell]]):Iterable[Swap] = {
@@ -31,25 +56,41 @@ object BoardAdviser {
         val snd = reversedSeq(1)
         fst.pos direction snd.pos match {
           case Horizontal() =>
-            val left = lookupLeft.find(f(fst)(_)) match {
-              case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.left))
-              case None => List[Swap]()
+            if (snd.pos.x - fst.pos.x > 1) {
+              lookupTornHorizontal.find(f(fst)(_)) match {
+                case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.right))
+                case None => List[Swap]()
+              }
             }
-            val right = lookupRight.find(f(snd)(_)) match {
-              case Some(lookup) => List(Swap(lookup(snd.pos), snd.pos.right))
-              case None => List[Swap]()
+            else {
+              val left = lookupLeft.find(f(fst)(_)) match {
+                case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.left))
+                case None => List[Swap]()
+              }
+              val right = lookupRight.find(f(snd)(_)) match {
+                case Some(lookup) => List(Swap(lookup(snd.pos), snd.pos.right))
+                case None => List[Swap]()
+              }
+              left ++ right
             }
-            left ++ right
           case Vertical() =>
-            val top = lookupTop.find(f(fst)(_)) match {
-              case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.top))
-              case None => List[Swap]()
+            if (snd.pos.y - fst.pos.y > 1) {
+              lookupTornVertical.find(f(fst)(_)) match {
+                case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.bottom))
+                case None => List[Swap]()
+              }
             }
-            val bottom = lookupBottom.find(f(snd)(_)) match {
-              case Some(lookup) => List(Swap(lookup(snd.pos), snd.pos.bottom))
-              case None => List[Swap]()
+            else {
+              val top = lookupTop.find(f(fst)(_)) match {
+                case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.top))
+                case None => List[Swap]()
+              }
+              val bottom = lookupBottom.find(f(snd)(_)) match {
+                case Some(lookup) => List(Swap(lookup(snd.pos), snd.pos.bottom))
+                case None => List[Swap]()
+              }
+              top ++ bottom
             }
-            top ++ bottom
         }
       }
       ret.flatten
@@ -74,12 +115,12 @@ object BoardAdviser {
       else None
     }
 
-    def bestAdvice:Option[Swap] = bestAdvice(default_depth, advices, defaultHeuristic)
+    def bestAdvice:Option[Swap] = bestAdvice(default_depth, advices, normalHeuristic)
 
-    def bestAdvice(depth:Int):Option[Swap] = bestAdvice(depth, this.advices, defaultHeuristic)
+    def bestAdvice(depth:Int):Option[Swap] = bestAdvice(depth, this.advices, normalHeuristic)
 
     def bestAdvice(depth:Int, advices:Iterable[Swap]):Option[Swap] = {
-      bestAdvice(depth, advices, defaultHeuristic)
+      bestAdvice(depth, advices, normalHeuristic)
     }
   }
 
@@ -105,6 +146,16 @@ object BoardAdviser {
 
   private val lookupBottom = List(
     (p:Point) => p.bottom(2),
+    (p:Point) => p.bottom.left,
+    (p:Point) => p.bottom.right
+  )
+
+  private val lookupTornHorizontal = List(
+    (p:Point) => p.right.top,
+    (p:Point) => p.right.bottom
+  )
+
+  private val lookupTornVertical = List(
     (p:Point) => p.bottom.left,
     (p:Point) => p.bottom.right
   )
