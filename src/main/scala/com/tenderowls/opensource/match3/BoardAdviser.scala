@@ -2,9 +2,6 @@ package com.tenderowls.opensource.match3
 
 import com.tenderowls.opensource.match3.Board._
 
-/**
- * @author Aleksey Fomkin <aleksey.fomkin@gmail.com>
- */
 object BoardAdviser {
 
   def normalHeuristic(brd:Board, swp:Swap):Int = {
@@ -21,25 +18,26 @@ object BoardAdviser {
     }
 
     def adviceSpecificSequences:Iterable[List[MatchedCell]] = {
-      val raw = board.foreach { (firstPoint:Point, i) =>
+      val raw = board.mapData { (firstPoint:Point, i) =>
         board.get(firstPoint) match {
           case Some(firstCell) =>
             def genSeq(secondPoint:Point):List[MatchedCell] = {
               board.get(secondPoint) match {
                 case Some(secondCell) =>
-                  firstCell matchWith secondCell match {
-                    case true =>
-                      List(
-                        MatchedCell(secondPoint, secondCell),
-                        MatchedCell(firstPoint, firstCell)
-                      )
-                    case false => List()
+                  if (firstCell matchWith secondCell) {
+                    List(
+                      MatchedCell(secondPoint, secondCell),
+                      MatchedCell(firstPoint, firstCell)
+                    )
                   }
-                case None => List()
+                  else {
+                    Nil
+                  }
+                case None => Nil
               }
             }
             List(genSeq(firstPoint right 2), genSeq(firstPoint bottom 2))
-          case None => List()
+          case None => Nil
         }
       }
       raw.flatten.filter(_.size == 2)
@@ -52,42 +50,42 @@ object BoardAdviser {
     def advices(sequences:Iterable[List[MatchedCell]]):Iterable[Swap] = {
       val ret = sequences map { seq =>
         val reversedSeq = seq.reverse
-        val fst = reversedSeq(0)
+        val fst = reversedSeq.head
         val snd = reversedSeq(1)
         fst.pos direction snd.pos match {
-          case Horizontal() =>
+          case Horizontal =>
             if (snd.pos.x - fst.pos.x > 1) {
               lookupTornHorizontal.find(f(fst)(_)) match {
                 case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.right))
-                case None => List[Swap]()
+                case None => List.empty[Swap]
               }
             }
             else {
               val left = lookupLeft.find(f(fst)(_)) match {
                 case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.left))
-                case None => List[Swap]()
+                case None => List.empty[Swap]
               }
               val right = lookupRight.find(f(snd)(_)) match {
                 case Some(lookup) => List(Swap(lookup(snd.pos), snd.pos.right))
-                case None => List[Swap]()
+                case None => List.empty[Swap]
               }
               left ++ right
             }
-          case Vertical() =>
+          case Vertical =>
             if (snd.pos.y - fst.pos.y > 1) {
               lookupTornVertical.find(f(fst)(_)) match {
                 case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.bottom))
-                case None => List[Swap]()
+                case None => List.empty[Swap]
               }
             }
             else {
               val top = lookupTop.find(f(fst)(_)) match {
                 case Some(lookup) => List(Swap(lookup(fst.pos), fst.pos.top))
-                case None => List[Swap]()
+                case None => List.empty[Swap]
               }
               val bottom = lookupBottom.find(f(snd)(_)) match {
                 case Some(lookup) => List(Swap(lookup(snd.pos), snd.pos.bottom))
-                case None => List[Swap]()
+                case None => List.empty[Swap]
               }
               top ++ bottom
             }

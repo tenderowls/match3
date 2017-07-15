@@ -39,8 +39,8 @@ object GeneratorSpec extends Specification {
       """
     board.data mustEqual Vector(
       IntCell(0), IntCell(0), IntCell(1),
-      EmptyCell(), EmptyCell(), IntCell(0),
-      IntCell(0), IntCell(0), BadCell()
+      EmptyCell, EmptyCell, IntCell(0),
+      IntCell(0), IntCell(0), BadCell
     )
   }
 

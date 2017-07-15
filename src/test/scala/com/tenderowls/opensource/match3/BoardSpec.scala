@@ -122,10 +122,10 @@ object BoardSpec extends Specification {
     val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
 
     ops._1 mustEqual Set(
-      Update(Point(2, 3), EmptyCell()),
-      Update(Point(2, 4), EmptyCell()),
-      Update(Point(2, 5), EmptyCell()),
-      Update(Point(2, 6), EmptyCell())
+      Update(Point(2, 3), EmptyCell),
+      Update(Point(2, 4), EmptyCell),
+      Update(Point(2, 5), EmptyCell),
+      Update(Point(2, 6), EmptyCell)
     )
 
     ops._2 mustEqual List(
@@ -152,9 +152,9 @@ object BoardSpec extends Specification {
     val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
 
     ops._1 mustEqual Set(
-      Update(Point(3, 2), EmptyCell()),
-      Update(Point(4, 2), EmptyCell()),
-      Update(Point(5, 2), EmptyCell())
+      Update(Point(3, 2), EmptyCell),
+      Update(Point(4, 2), EmptyCell),
+      Update(Point(5, 2), EmptyCell)
     )
 
     ops._2 mustEqual List(
@@ -184,9 +184,9 @@ object BoardSpec extends Specification {
     val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
 
     ops._1 mustEqual Set(
-      Update(Point(2, 4), EmptyCell()),
-      Update(Point(2, 5), EmptyCell()),
-      Update(Point(2, 6), EmptyCell())
+      Update(Point(2, 4), EmptyCell),
+      Update(Point(2, 5), EmptyCell),
+      Update(Point(2, 6), EmptyCell)
     )
 
     ops._2 mustEqual List(
@@ -198,7 +198,7 @@ object BoardSpec extends Specification {
     val seq = board.matchedSequence.get
     val ops = board.calculateRemoveSequenceOperations(seq)
     val newBoard = board.applyOperations(ops)
-    newBoard.stringify mustEqual expect.stringify
+    newBoard.mkString mustEqual expect.mkString
   }
 
   def testApplyOperations1 = testApplyOperations(

@@ -23,7 +23,7 @@ object BoardGenerator {
         .map(row => row.trim)
         .filter(_.length > 0)
       val cells =
-        0 until rows.length map { y =>
+        rows.indices map { y =>
           val values = rows(y).split(" ")
           0 until values.length filter { x =>
             values(x) match {
@@ -32,8 +32,8 @@ object BoardGenerator {
             }
           } map { x =>
             values(x) match {
-              case "_" => BadCell()
-              case "*" => EmptyCell()
+              case "_" => BadCell
+              case "*" => EmptyCell
               case "?" => rndVal()
               case ValuePattern(value) => IntCell(value.toInt)
               case s: String =>
