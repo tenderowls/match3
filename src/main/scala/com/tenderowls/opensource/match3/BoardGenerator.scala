@@ -1,16 +1,11 @@
 package com.tenderowls.opensource.match3
 
-import com.tenderowls.opensource.match3.Board._
-
-/**
- * @author Aleksey Fomkin <aleksey.fomkin@gmail.com>
- */
 object BoardGenerator {
 
+  import Cell._
+
   case class IntCell(x: Int) extends Cell {
-    override def toString = {
-      x.toString
-    }
+    override def toString: String = x.toString
   }
 
   val ValuePattern = "(\\d)".r
@@ -54,15 +49,13 @@ object BoardGenerator {
 
   def square(makeStable:Boolean = true)(implicit rules: Rules): Board = {
     val raw =
-      0 until rules.height map { y =>
-        0 until rules.width map { x =>
+      0 until rules.height map { _ =>
+        0 until rules.width map { _ =>
           rules.randomValue
         }
       }
     val data = raw.flatten.toVector
-    makeStable match {
-      case true => Board(rules, data).stable
-      case false => Board(rules, data)
-    }
+    if (makeStable) Board(rules, data).stable
+    else Board(rules, data)
   }
 }

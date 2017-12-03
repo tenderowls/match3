@@ -1,14 +1,13 @@
 package com.tenderowls.opensource.match3
 
-import com.tenderowls.opensource.match3.Board._
+import BoardOperation._
+import Cell._
+
 import com.tenderowls.opensource.match3.BoardGenerator._
 import org.specs2._
 
 import scala.util.Random
 
-/**
- * @author Aleksey Fomkin <aleksey.fomkin@gmail.com>
- */
 object BoardSpec extends Specification {
 
   val rnd = new Random()

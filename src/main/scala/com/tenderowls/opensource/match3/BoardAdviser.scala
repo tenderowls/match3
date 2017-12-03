@@ -1,8 +1,10 @@
 package com.tenderowls.opensource.match3
 
-import com.tenderowls.opensource.match3.Board._
-
 object BoardAdviser {
+
+  import Direction._
+  import BoardOperation._
+  import Cell._
 
   def normalHeuristic(brd:Board, swp:Swap):Int = {
     brd.applyOperations(List(swp)).matchedSequences().flatten.size

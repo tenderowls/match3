@@ -1,6 +1,7 @@
 package com.tenderowls.opensource.match3
 
-import com.tenderowls.opensource.match3.Board.{Swap, Point}
+import BoardOperation._
+
 import com.tenderowls.opensource.match3.BoardGenerator._
 import com.tenderowls.opensource.match3.BoardAdviser._
 import org.specs2._
