@@ -70,6 +70,10 @@ object PlayerActor {
                 Actor.same
               case _: Event.GameStarted =>
                 Actor.same
+              case Event.YouWin =>
+                Actor.same
+              case Event.YouLose =>
+                Actor.same
             }
           } onSignal {
             case (_, Terminated(`game`)) =>
@@ -95,6 +99,8 @@ object PlayerActor {
     final case class OpponentTurn(time: FiniteDuration) extends Event
     final case class WhatsYourName(replyTo: ActorRef[String]) extends Event
 
+    case object YouWin extends Event
+    case object YouLose extends Event
     case object EndOfTurn extends Event
   }
 }

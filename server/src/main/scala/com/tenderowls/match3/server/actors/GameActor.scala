@@ -14,7 +14,8 @@ object GameActor {
             initialBoard: Board,
             timeout: FiniteDuration,
             animationDuration: FiniteDuration,
-            match3Rules: Rules): Behavior[Event] = {
+            match3Rules: Rules,
+            maxScore: Int): Behavior[Event] = {
 
     Actor.deferred[Event] { ctx =>
 
@@ -44,65 +45,76 @@ object GameActor {
         println("Became await animation")
         Actor.immutable[Event] {
           case (_, Event.Ready) => turn
-          case _                    => Actor.same
+          case _                => Actor.same
         }
       }
 
       def turn(currentPlayer: Player, leftPlayerScore: Score, rightPlayerScore: Score): Behavior[Event] = {
-
         Actor.deferred[Event] { ctx =>
 
-          println(s"Turn for $currentPlayer")
-          if (currentPlayer == leftPlayer) {
-            leftPlayer ! PlayerActor.Event.YourTurn(timeout)
-            rightPlayer ! PlayerActor.Event.OpponentTurn(timeout)
-          } else {
-            rightPlayer ! PlayerActor.Event.YourTurn(timeout)
-            leftPlayer ! PlayerActor.Event.OpponentTurn(timeout)
+          if (leftPlayerScore.exists(_ >= maxScore)) {
+            leftPlayer ! PlayerActor.Event.YouWin
+            rightPlayer ! PlayerActor.Event.YouLose
+            Actor.stopped
           }
-          val timeoutSchedule = ctx.schedule(timeout, ctx.self, Event.TimeIsOut)
+          else if (rightPlayerScore.exists(_ >= maxScore)) {
+            leftPlayer ! PlayerActor.Event.YouLose
+            rightPlayer ! PlayerActor.Event.YouWin
+            Actor.stopped
+          }
+          else {
+            if (currentPlayer == leftPlayer) {
+              leftPlayer ! PlayerActor.Event.YourTurn(timeout)
+              rightPlayer ! PlayerActor.Event.OpponentTurn(timeout)
+            } else {
+              rightPlayer ! PlayerActor.Event.YourTurn(timeout)
+              leftPlayer ! PlayerActor.Event.OpponentTurn(timeout)
+            }
 
-          Actor.immutable[Event] {
-            case (_, Event.TimeIsOut) =>
-              currentPlayer match {
-                case `leftPlayer` =>
-                  leftPlayer ! PlayerActor.Event.EndOfTurn
-                  rightPlayer ! PlayerActor.Event.EndOfTurn
-                  turn(rightPlayer, leftPlayerScore, rightPlayerScore)
-                case `rightPlayer` =>
-                  rightPlayer ! PlayerActor.Event.EndOfTurn
-                  leftPlayer ! PlayerActor.Event.EndOfTurn
-                  turn(leftPlayer, leftPlayerScore, rightPlayerScore)
-              }
-            case (_, Event.MoveResult(batch, score)) =>
-              val event = PlayerActor.Event.MoveResult(batch)
-              leftPlayer ! event
-              rightPlayer ! event
-              // Be ready after animation finished
-              println(s"Schedule next turn on ${animationDuration * batch.length}")
-              ctx.schedule(animationDuration * batch.length, ctx.self, Event.Ready)
-              val nextTurn = currentPlayer match {
-                case `leftPlayer` =>
-                  leftPlayer ! PlayerActor.Event.EndOfTurn
-                  rightPlayer ! PlayerActor.Event.EndOfTurn
-                  turn(rightPlayer, leftPlayerScore, rightPlayerScore + score)
-                case `rightPlayer` =>
-                  rightPlayer ! PlayerActor.Event.EndOfTurn
-                  leftPlayer ! PlayerActor.Event.EndOfTurn
-                  turn(leftPlayer, leftPlayerScore + score, rightPlayerScore)
-              }
-              awaitAnimation(nextTurn)
-            case (_, Event.MakeMove(client, op)) =>
-              if (client == currentPlayer) {
-                timeoutSchedule.cancel()
-                boardActor ! op
-              }
-              Actor.same[Event]
-            case _ =>
-              Actor.same
-          } onSignal {
-            case (_, Terminated(`leftPlayer`)) => Actor.stopped
-            case (_, Terminated(`rightPlayer`)) => Actor.stopped
+            val timeoutSchedule = ctx.schedule(timeout, ctx.self, Event.TimeIsOut)
+
+            Actor.immutable[Event] {
+              case (_, Event.TimeIsOut) =>
+                currentPlayer match {
+                  case `leftPlayer` =>
+                    leftPlayer ! PlayerActor.Event.EndOfTurn
+                    rightPlayer ! PlayerActor.Event.EndOfTurn
+                    turn(rightPlayer, leftPlayerScore, rightPlayerScore)
+                  case `rightPlayer` =>
+                    rightPlayer ! PlayerActor.Event.EndOfTurn
+                    leftPlayer ! PlayerActor.Event.EndOfTurn
+                    turn(leftPlayer, leftPlayerScore, rightPlayerScore)
+                }
+              case (_, Event.MoveResult(batch, score)) =>
+                val event = PlayerActor.Event.MoveResult(batch)
+                leftPlayer ! event
+                rightPlayer ! event
+                // Be ready after animation finished
+                println(s"Schedule next turn on ${animationDuration * batch.length}")
+                ctx.schedule(animationDuration * batch.length, ctx.self, Event.Ready)
+                val nextTurn = currentPlayer match {
+                  case `leftPlayer` =>
+                    leftPlayer ! PlayerActor.Event.EndOfTurn
+                    rightPlayer ! PlayerActor.Event.EndOfTurn
+                    turn(rightPlayer, leftPlayerScore + score, rightPlayerScore)
+                  case `rightPlayer` =>
+                    rightPlayer ! PlayerActor.Event.EndOfTurn
+                    leftPlayer ! PlayerActor.Event.EndOfTurn
+                    turn(leftPlayer, leftPlayerScore, rightPlayerScore + score)
+                }
+                awaitAnimation(nextTurn)
+              case (_, Event.MakeMove(client, op)) =>
+                if (client == currentPlayer) {
+                  timeoutSchedule.cancel()
+                  boardActor ! op
+                }
+                Actor.same[Event]
+              case _ =>
+                Actor.same
+            } onSignal {
+              case (_, Terminated(`leftPlayer`)) => Actor.stopped
+              case (_, Terminated(`rightPlayer`)) => Actor.stopped
+            }
           }
         }
       }

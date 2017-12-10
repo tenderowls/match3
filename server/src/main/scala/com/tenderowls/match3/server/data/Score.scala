@@ -2,6 +2,9 @@ package com.tenderowls.match3.server.data
 
 case class Score(data: Map[ColorCell, Int]) extends AnyVal { a =>
 
+  def exists(f: Int => Boolean): Boolean =
+    data.values.exists(f)
+
   def inc(cell: ColorCell): Score = {
     val entry = (cell, a.data.get(cell).fold(0)(_ + 1))
     Score(a.data + entry)

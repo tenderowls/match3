@@ -11,20 +11,20 @@ object LobbyActor {
 
   def mkId: String = Random.alphanumeric.take(6).mkString
 
-  def apply(timeout: FiniteDuration, animationDuration: FiniteDuration, rules: Rules): Behavior[Event] = {
+  def apply(timeout: FiniteDuration, animationDuration: FiniteDuration, rules: Rules, maxScore: Int): Behavior[Event] = {
     def matchMaking(pendingPlayerOpt: Option[Player]): Behavior[Event] = {
       Actor.immutable[Event] {
         case (ctx, Event.Enter(player)) =>
           pendingPlayerOpt match {
             case Some(pendingPlayer) =>
               val board = BoardGenerator.square()(rules)
-              val gameBehavior = GameActor(pendingPlayer, player, board, timeout, animationDuration, rules)
+              val gameBehavior = GameActor(pendingPlayer, player, board, timeout, animationDuration, rules, maxScore)
               ctx.spawn(gameBehavior, s"game-$mkId")
               matchMaking(None)
             case None =>
               val board = BoardGenerator.square()(rules)
               val bot = ctx.spawn(PlayerActor.bot("bot"), s"bot-$mkId")
-              val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, rules)
+              val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, rules, maxScore)
               ctx.spawn(gameBehavior, s"game-$mkId")
               matchMaking(None)
               //matchMaking(Some(player))

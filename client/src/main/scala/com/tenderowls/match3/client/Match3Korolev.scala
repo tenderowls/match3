@@ -44,7 +44,7 @@ object Match3Korolev extends KorolevBlazeServer {
     val height = side
   }
 
-  val lobby = actorSystem.spawn(LobbyActor(30.seconds, 350.millis, boardRules), s"lobby")
+  val lobby = actorSystem.spawn(LobbyActor(30.seconds, 350.millis, boardRules, 10), s"lobby")
   val nameInputId = elementId
 
   val service = blazeService[Future, State, ClientEvent] from KorolevServiceConfig[Future, State, ClientEvent](
@@ -106,6 +106,13 @@ object Match3Korolev extends KorolevBlazeServer {
                       )
                       State.Game(info, updatedParams)
                   }
+
+                case PlayerActor.Event.YouWin =>
+                  applyTransition(_ => State.YouWin)
+
+                case PlayerActor.Event.YouLose =>
+                  applyTransition(_ => State.YouLose)
+
                 case _ => ()
               }
               actorSystem.spawn(behavior, s"player-$id")
@@ -130,6 +137,12 @@ object Match3Korolev extends KorolevBlazeServer {
             }
           )
         )
+      case State.YouWin =>
+        'body("You win")
+
+      case State.YouLose =>
+        'body("You lose")
+
       case State.Lobby(_, true) =>
         'body("Looking for opponent...")
       case State.Lobby(name, false) =>
