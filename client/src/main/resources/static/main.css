@@ -1,0 +1,24 @@
+body {
+}
+
+.circle-touchable {
+  transition:
+      r .3s ease
+    , fill-opacity .2s ease;
+}
+
+.circle-movable {
+  transition:
+      r .3s ease
+    , cx .25s ease
+    , cy .25s ease;
+}
+
+.score {
+  border-radius: 10px;
+}
+
+.score-bar {
+  border-radius: 10px;
+  transition: width .3s ease;
+}
