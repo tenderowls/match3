@@ -1,5 +1,5 @@
-val akkaVersion = "2.5.7"
-val korolevVersion = "0.6.1"
+val akkaVersion = "2.5.8"
+val korolevVersion = "0.8.1"
 val commonSettings = Seq(
   organization := "com.tenderowls",
   version      := "1.0.0",
@@ -28,7 +28,7 @@ lazy val client = project
   .settings(commonSettings:_*)
   .settings(
     libraryDependencies ++= Seq(
-      "com.github.fomkin" %% "korolev-server-blaze" % korolevVersion,
+      "com.github.fomkin" %% "korolev-server-akkahttp" % korolevVersion,
       "org.slf4j" % "slf4j-simple" % "1.7.+"
     )
   )

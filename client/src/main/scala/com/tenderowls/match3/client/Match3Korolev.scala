@@ -1,6 +1,7 @@
 package com.tenderowls.match3.client
 
 import akka.actor.ActorSystem
+import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import akka.typed.ActorRef
 import akka.typed.scaladsl.adapter._
@@ -11,19 +12,18 @@ import com.tenderowls.match3.client.components.BoardComponent.Rgb
 import com.tenderowls.match3.server.actors.{GameActor, LobbyActor, PlayerActor}
 import com.tenderowls.match3.server.data.{ColorCell, PlayerInfo, Score}
 import korolev.Context
-import korolev.blazeServer._
 import korolev.execution._
-import korolev.server.KorolevServiceConfig.Env
 import korolev.server._
+import korolev.akkahttp._
+import korolev.state.EnvConfigurator
 import korolev.state.javaSerialization._
 import levsha.Document
-import org.http4s.blaze.http.HttpService
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
 
-object Match3Korolev extends KorolevBlazeServer {
+object Match3Korolev extends App {
 
   import State.globalContext._
   import State.globalContext.symbolDsl._
@@ -50,92 +50,97 @@ object Match3Korolev extends KorolevBlazeServer {
   }
 
   private val lobby = actorSystem.spawn(LobbyActor(timeout, animationDuration, boardRules, maxScore), s"lobby")
-  private val nameInputId = elementId
+  private val nameInputId = elementId()
 
-  val service: HttpService = blazeService[Future, State, ClientEvent] from KorolevServiceConfig[Future, State, ClientEvent](
+  private val serviceConfig = KorolevServiceConfig[Future, State, ClientEvent](
     stateStorage = StateStorage.default(State.Login),
-    envConfigurator = { (deviceId, sessionId, applyTransition) =>
+    envConfigurator = EnvConfigurator { access =>
+      access.sessionId.map { qsi =>
+        val id = s"${qsi.deviceId}-${qsi.id}"
+        var player: ActorRef[PlayerActor.Event] = null
+        var game: ActorRef[BoardOperation.Swap] = null
 
-      val id = s"$deviceId-$sessionId"
-      var player: ActorRef[PlayerActor.Event] = null
-      var game: ActorRef[BoardOperation.Swap] = null
-
-      def stopPlayer(): Unit = if (player != null) {
-        actorSystem.stop(player.toUntyped)
-        player = null
-      }
-
-      Env(
-        onDestroy = { () =>
-          stopPlayer()
-        },
-        onMessage = {
-          case ClientEvent.PlayWithBot =>
-            val board = BoardGenerator.square()(boardRules)
-            val bot = actorSystem.spawn(PlayerActor.bot("bot"), s"bot-${LobbyActor.mkId}")
-            val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, boardRules, maxScore)
-            lobby ! LobbyActor.Event.Leave(player)
-            actorSystem.spawn(gameBehavior, s"game-${LobbyActor.mkId}")
-          case ClientEvent.MakeMove(swap) =>
-            if (game != null)
-              game ! swap
-          case ClientEvent.EnterLobby(name) =>
-            player = {
-              val behavior = PlayerActor.localPlayer(name) {
-                case PlayerActor.Event.GameStarted(board, gameRef, opponent) =>
-                  game = gameRef
-                  applyTransition { _ =>
-                    val you = PlayerInfo(name)
-                    val enemy = PlayerInfo("?")
-                    val info = GameInfo(enemy, you, enemy, Score.empty, Score.empty, None)
-                    val params = BoardComponent.Params(board, Nil, 0)
-                    State.Game(info, params)
-                  }
-                case PlayerActor.Event.YourTurn(time) =>
-                  applyTransition {
-                    case game @ State.Game(info, _) =>
-                      game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time)))
-                  }
-
-                case PlayerActor.Event.OpponentTurn(time) =>
-                  applyTransition {
-                    case game @ State.Game(info, _) =>
-                      game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time)))
-                  }
-
-                case PlayerActor.Event.EndOfTurn =>
-                  applyTransition {
-                    case game @ State.Game(info, _) =>
-                      game.copy(info.copy(timeRemaining = None))
-                  }
-
-                case PlayerActor.Event.MoveResult(batch) =>
-                  println(s"! move result $batch")
-                  applyTransition {
-                    case State.Game(info, params) =>
-                      println(s"! transition matched")
-                      val updatedParams = params.copy(
-                        animationNumber = params.animationNumber + 1,
-                        batch = batch
-                      )
-                      State.Game(info, updatedParams)
-                  }
-
-                case PlayerActor.Event.YouWin =>
-                  stopPlayer()
-                  applyTransition(_ => State.YouWin)
-
-                case PlayerActor.Event.YouLose =>
-                  stopPlayer()
-                  applyTransition(_ => State.YouLose)
-
-                case _ => ()
-              }
-              actorSystem.spawn(behavior, s"player-$id")
-            }
-            lobby ! LobbyActor.Event.Enter(player)
+        def stopPlayer(): Unit = if (player != null) {
+          actorSystem.stop(player.toUntyped)
+          player = null
         }
-      )
+
+        EnvConfigurator.Env(
+          onDestroy = { () =>
+            stopPlayer()
+            Future.unit
+          },
+          onMessage = {
+            case ClientEvent.PlayWithBot =>
+              val board = BoardGenerator.square()(boardRules)
+              val bot = actorSystem.spawn(PlayerActor.bot("bot"), s"bot-${LobbyActor.mkId}")
+              val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, boardRules, maxScore)
+              lobby ! LobbyActor.Event.Leave(player)
+              actorSystem.spawn(gameBehavior, s"game-${LobbyActor.mkId}")
+              Future.unit
+            case ClientEvent.MakeMove(swap) =>
+              if (game != null)
+                game ! swap
+              Future.unit
+            case ClientEvent.EnterLobby(name) =>
+              player = {
+                val behavior = PlayerActor.localPlayer(name) {
+                  case PlayerActor.Event.GameStarted(board, gameRef, opponent) =>
+                    game = gameRef
+                    access.transition { _ =>
+                      val you = PlayerInfo(name)
+                      val enemy = PlayerInfo("?")
+                      val info = GameInfo(enemy, you, enemy, Score.empty, Score.empty, None)
+                      val params = BoardComponent.Params(board, Nil, 0)
+                      State.Game(info, params)
+                    }
+                  case PlayerActor.Event.YourTurn(time) =>
+                    access.transition {
+                      case game @ State.Game(info, _) =>
+                        game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time)))
+                    }
+
+                  case PlayerActor.Event.OpponentTurn(time) =>
+                    access.transition {
+                      case game @ State.Game(info, _) =>
+                        game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time)))
+                    }
+
+                  case PlayerActor.Event.EndOfTurn =>
+                    access.transition {
+                      case game @ State.Game(info, _) =>
+                        game.copy(info.copy(timeRemaining = None))
+                    }
+
+                  case PlayerActor.Event.MoveResult(batch) =>
+                    println(s"! move result $batch")
+                    access.transition {
+                      case State.Game(info, params) =>
+                        println(s"! transition matched")
+                        val updatedParams = params.copy(
+                          animationNumber = params.animationNumber + 1,
+                          batch = batch
+                        )
+                        State.Game(info, updatedParams)
+                    }
+
+                  case PlayerActor.Event.YouWin =>
+                    stopPlayer()
+                    access.transition(_ => State.YouWin)
+
+                  case PlayerActor.Event.YouLose =>
+                    stopPlayer()
+                    access.transition(_ => State.YouLose)
+
+                  case _ => ()
+                }
+                actorSystem.spawn(behavior, s"player-$id")
+              }
+              lobby ! LobbyActor.Event.Enter(player)
+              Future.unit
+          }
+        )
+      }
     },
     head = Seq(
       'link('href /= "main.css", 'rel /= "stylesheet", 'type /= "text/css")
@@ -205,8 +210,12 @@ object Match3Korolev extends KorolevBlazeServer {
           )
         )
     },
-    serverRouter = ServerRouter.empty[Future, State]
+    router = emptyRouter
   )
+
+  private val route = akkaHttpService(serviceConfig).apply(AkkaHttpServerConfig())
+
+  Http().bindAndHandle(route, "0.0.0.0", 8080)
 
   private def enterLobbyButton(name: String) = {
     'button(
