@@ -12,30 +12,26 @@ object LobbyActor {
   def mkId: String = Random.alphanumeric.take(6).mkString
 
   def apply(timeout: FiniteDuration, animationDuration: FiniteDuration, rules: Rules, maxScore: Int): Behavior[Event] = {
-    def matchMaking(pendingPlayerOpt: Option[Player]): Behavior[Event] = {
+    def matchMaking(pendingPlayers: List[Player]): Behavior[Event] = {
       Actor.immutable[Event] {
         case (ctx, Event.Enter(player)) =>
-          pendingPlayerOpt match {
-            case Some(pendingPlayer) =>
+          pendingPlayers match {
+            case Nil =>
+              matchMaking(List(player))
+            case pendingPlayer :: restPendingPlayers =>
               val board = BoardGenerator.square()(rules)
               val gameBehavior = GameActor(pendingPlayer, player, board, timeout, animationDuration, rules, maxScore)
               ctx.spawn(gameBehavior, s"game-$mkId")
-              matchMaking(None)
-            case None =>
-              val board = BoardGenerator.square()(rules)
-              val bot = ctx.spawn(PlayerActor.bot("bot"), s"bot-$mkId")
-              val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, rules, maxScore)
-              ctx.spawn(gameBehavior, s"game-$mkId")
-              matchMaking(None)
-              //matchMaking(Some(player))
+              println(s"restPendingPlayers = $restPendingPlayers")
+              matchMaking(restPendingPlayers)
           }
-        case (_, Event.Leave(player)) if pendingPlayerOpt.contains(player) =>
-          matchMaking(None)
+        case (_, Event.Leave(player)) =>
+          matchMaking(pendingPlayers.filter(_ != player))
         case _ =>
           Actor.same
       }
     }
-    matchMaking(None)
+    matchMaking(Nil)
   }
 
   sealed trait Event

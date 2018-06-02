@@ -2,20 +2,22 @@ package com.tenderowls.match3.client
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.typed.scaladsl.adapter._
 import akka.typed.ActorRef
-import com.tenderowls.match3.server.actors.{GameActor, LobbyActor, PlayerActor}
-import com.tenderowls.match3.server.data.{ColorCell, PlayerInfo, Score}
+import akka.typed.scaladsl.adapter._
+import com.tenderowls.match3._
 import com.tenderowls.match3.client.State.GameInfo
 import com.tenderowls.match3.client.components.BoardComponent
-import com.tenderowls.match3.client.components.BoardComponent.{Params, Rgb}
-import korolev.state.javaSerialization._
-import com.tenderowls.match3._
+import com.tenderowls.match3.client.components.BoardComponent.Rgb
+import com.tenderowls.match3.server.actors.{GameActor, LobbyActor, PlayerActor}
+import com.tenderowls.match3.server.data.{ColorCell, PlayerInfo, Score}
+import korolev.Context
+import korolev.blazeServer._
 import korolev.execution._
 import korolev.server.KorolevServiceConfig.Env
 import korolev.server._
-
-import korolev.blazeServer._
+import korolev.state.javaSerialization._
+import levsha.Document
+import org.http4s.blaze.http.HttpService
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -26,12 +28,15 @@ object Match3Korolev extends KorolevBlazeServer {
   import State.globalContext._
   import State.globalContext.symbolDsl._
 
-  private implicit val actorSystem = ActorSystem()
-  private implicit val materializer = ActorMaterializer()
+  private implicit val actorSystem: ActorSystem = ActorSystem()
+  private implicit val materializer: ActorMaterializer = ActorMaterializer()
 
-  val side = 9
+  final val side = 9
+  final val timeout = 30.seconds
+  final val animationDuration = 350.millis
+  final val maxScore = 10
 
-  implicit val boardRules = new Rules {
+  implicit val boardRules: Rules = new Rules {
     def randomValue: Cell = Random.nextInt(6) match {
       case 0 => ColorCell.RedCell
       case 1 => ColorCell.GreenCell
@@ -40,14 +45,14 @@ object Match3Korolev extends KorolevBlazeServer {
       case 4 => ColorCell.GrayCell
       case 5 => ColorCell.CyanCell
     }
-    val width = side
-    val height = side
+    val width: Int = side
+    val height: Int = side
   }
 
-  val lobby = actorSystem.spawn(LobbyActor(30.seconds, 350.millis, boardRules, 10), s"lobby")
-  val nameInputId = elementId
+  private val lobby = actorSystem.spawn(LobbyActor(timeout, animationDuration, boardRules, maxScore), s"lobby")
+  private val nameInputId = elementId
 
-  val service = blazeService[Future, State, ClientEvent] from KorolevServiceConfig[Future, State, ClientEvent](
+  val service: HttpService = blazeService[Future, State, ClientEvent] from KorolevServiceConfig[Future, State, ClientEvent](
     stateStorage = StateStorage.default(State.Login),
     envConfigurator = { (deviceId, sessionId, applyTransition) =>
 
@@ -55,13 +60,22 @@ object Match3Korolev extends KorolevBlazeServer {
       var player: ActorRef[PlayerActor.Event] = null
       var game: ActorRef[BoardOperation.Swap] = null
 
+      def stopPlayer(): Unit = if (player != null) {
+        actorSystem.stop(player.toUntyped)
+        player = null
+      }
+
       Env(
         onDestroy = { () =>
-          if (player != null) {
-            actorSystem.stop(player.toUntyped)
-          }
+          stopPlayer()
         },
         onMessage = {
+          case ClientEvent.PlayWithBot =>
+            val board = BoardGenerator.square()(boardRules)
+            val bot = actorSystem.spawn(PlayerActor.bot("bot"), s"bot-${LobbyActor.mkId}")
+            val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, boardRules, maxScore)
+            lobby ! LobbyActor.Event.Leave(player)
+            actorSystem.spawn(gameBehavior, s"game-${LobbyActor.mkId}")
           case ClientEvent.MakeMove(swap) =>
             if (game != null)
               game ! swap
@@ -108,9 +122,11 @@ object Match3Korolev extends KorolevBlazeServer {
                   }
 
                 case PlayerActor.Event.YouWin =>
+                  stopPlayer()
                   applyTransition(_ => State.YouWin)
 
                 case PlayerActor.Event.YouLose =>
+                  stopPlayer()
                   applyTransition(_ => State.YouLose)
 
                 case _ => ()
@@ -138,27 +154,18 @@ object Match3Korolev extends KorolevBlazeServer {
           )
         )
       case State.YouWin =>
-        'body("You win")
+        'body("You win", enterLobbyButton("player-unknown")) // TODO
 
       case State.YouLose =>
-        'body("You lose")
+        'body("You lose", enterLobbyButton("player-unknown")) // TODO
 
       case State.Lobby(_, true) =>
-        'body("Looking for opponent...")
-      case State.Lobby(name, false) =>
         'body(
-          'button(
-            "Enter lobby",
-            event('click) { access =>
-              access.publish(ClientEvent.EnterLobby(name)).flatMap { _ =>
-                access.transition {
-                  case lobby: State.Lobby =>
-                    lobby.copy(lookingForOpponent = true)
-                }
-              }
-            }
-          )
+          "Looking for opponent...",
+          'button("Play with bot", event('click)(_.publish(ClientEvent.PlayWithBot)))
         )
+      case State.Lobby(name, false) =>
+        'body(enterLobbyButton(name))
       case State.Game(gameInfo, boardParams) =>
         'body(
           'div(
@@ -201,17 +208,31 @@ object Match3Korolev extends KorolevBlazeServer {
     serverRouter = ServerRouter.empty[Future, State]
   )
 
-  def renderScore(score: Score) = {
-    'div(
-      score.data.map {
-        case (colorCell, count) =>
-          val color = BoardComponent.cellToColor(colorCell)
-          renderScoreLine(color, 500, 10, count / 10d)
+  private def enterLobbyButton(name: String) = {
+    'button(
+      "Enter lobby",
+      event('click) { access =>
+        access.publish(ClientEvent.EnterLobby(name)).flatMap { _ =>
+          access.transition {
+            case lobby: State.Lobby =>
+              lobby.copy(lookingForOpponent = true)
+          }
+        }
       }
     )
   }
 
-  def renderScoreLine(color: Rgb, width: Int, height: Int, progress: Double) = {
+  private def renderScore(score: Score): Document.Node[Context.Effect[Future, State, ClientEvent]] = {
+    'div(
+      score.data.map {
+        case (colorCell, count) =>
+          val color = BoardComponent.cellToColor(colorCell)
+          renderScoreLine(color, 500, 10, count.toDouble / maxScore.toDouble)
+      }
+    )
+  }
+
+  private def renderScoreLine(color: Rgb, width: Int, height: Int, progress: Double): Document.Node[Context.Effect[Future, State, ClientEvent]] = {
     'div(
       'class /= "score",
       'width @= width,
@@ -219,7 +240,7 @@ object Match3Korolev extends KorolevBlazeServer {
       'backgroundColor @= color.toStringWithAlpha(0.1),
       'div(
         'class /= "score-bar",
-        'width @= width * progress,
+        'width @= Math.min(width, width * progress),
         'height @= height,
         'backgroundColor @= color.toString
       )
