@@ -172,41 +172,48 @@ object Match3Korolev extends App {
       case State.Lobby(name, false) =>
         'body(enterLobbyButton(name))
       case State.Game(gameInfo, boardParams) =>
+
+        def moveIndicator(player: PlayerInfo, score: Score) = {
+          val thisMove = gameInfo.currentPlayer == player
+          'div(
+            if (thisMove) 'class /= "move-indicator move-indicator__current"
+            else 'class /= "move-indicator",
+            'div(
+              'display @= "flex",
+              'justifyContent @= "space-between",
+              player.toString,
+              if (thisMove) gameInfo.timeRemaining.map(s => 'div(s.toSeconds.toString)) else void
+            ),
+            renderScore(score)
+          )
+        }
+
         'body(
-          'div(
-            gameInfo.timeRemaining.toString(),
-            delay(1.second) { access =>
-              access.transition {
-                case game: State.Game =>
-                  game.copy(info = game.info.copy(timeRemaining = game.info.timeRemaining.map(_ - 1.second)))
-                case s => s
-              }
-            }
-          ),
-          'div(
-            if (gameInfo.currentPlayer == gameInfo.you) 'border @= "1px solid black" else void,
-            gameInfo.you.toString,
-            renderScore(gameInfo.yourScore)
-          ),
-          BoardComponent.create(boardParams) { (access, event) =>
-            event match {
-              case BoardComponent.Event.Move(swap) =>
-                access.publish(ClientEvent.MakeMove(swap))
-              case BoardComponent.Event.AddScore(score) =>
-                access.transition {
-                  case game @ State.Game(info, _) if info.currentPlayer == info.you =>
-                    game.copy(info = info.copy(yourScore = info.yourScore + score))
-                  case game @ State.Game(info, _) if info.currentPlayer == info.opponent =>
-                    game.copy(info = info.copy(opponentScore = info.opponentScore + score))
-                  case game =>
-                    game
-                }
+          delay(1.second) { access =>
+            access.transition {
+              case game: State.Game =>
+                game.copy(info = game.info.copy(timeRemaining = game.info.timeRemaining.map(_ - 1.second)))
+              case s => s
             }
           },
-          'div(
-            if (gameInfo.currentPlayer == gameInfo.opponent) 'border @= "1px solid black" else void,
-            gameInfo.opponent.toString,
-            renderScore(gameInfo.opponentScore)
+          'div('class /= "game",
+            moveIndicator(gameInfo.you, gameInfo.yourScore),
+            BoardComponent.create(boardParams) { (access, event) =>
+              event match {
+                case BoardComponent.Event.Move(swap) =>
+                  access.publish(ClientEvent.MakeMove(swap))
+                case BoardComponent.Event.AddScore(score) =>
+                  access.transition {
+                    case game @ State.Game(info, _) if info.currentPlayer == info.you =>
+                      game.copy(info = info.copy(yourScore = info.yourScore + score))
+                    case game @ State.Game(info, _) if info.currentPlayer == info.opponent =>
+                      game.copy(info = info.copy(opponentScore = info.opponentScore + score))
+                    case game =>
+                      game
+                  }
+              }
+            },
+            moveIndicator(gameInfo.opponent, gameInfo.opponentScore)
           )
         )
     },
@@ -236,20 +243,19 @@ object Match3Korolev extends App {
       score.data.map {
         case (colorCell, count) =>
           val color = BoardComponent.cellToColor(colorCell)
-          renderScoreLine(color, 500, 10, count.toDouble / maxScore.toDouble)
+          renderScoreLine(color, 10, count.toDouble / maxScore.toDouble)
       }
     )
   }
 
-  private def renderScoreLine(color: Rgb, width: Int, height: Int, progress: Double): Document.Node[Context.Effect[Future, State, ClientEvent]] = {
+  private def renderScoreLine(color: Rgb, height: Int, progress: Double): Document.Node[Context.Effect[Future, State, ClientEvent]] = {
     'div(
       'class /= "score",
-      'width @= width,
       'height @= height,
       'backgroundColor @= color.toStringWithAlpha(0.1),
       'div(
         'class /= "score-bar",
-        'width @= Math.min(width, width * progress),
+        'width @= s"${Math.min(progress * 100, 100)}%",
         'height @= height,
         'backgroundColor @= color.toString
       )

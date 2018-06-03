@@ -48,6 +48,7 @@ object BoardActor {
             .toList
             .flatten
             .map { p => Update(p, rules.randomValue) }
+
           // Test board is stable (no matched sequences)
           resultBoard.applyOperations(ops).matchedSequence match {
             case None => ops

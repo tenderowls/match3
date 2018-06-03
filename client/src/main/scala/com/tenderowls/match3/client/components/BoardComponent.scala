@@ -10,6 +10,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import korolev.execution._
 import korolev.state.javaSerialization._
+import levsha.Document.Attr
+import levsha.XmlNs
 
 object BoardComponent {
 
@@ -73,8 +75,8 @@ object BoardComponent {
         case Swap(to, `point`)       => to
       }
       ns.svg('svg)(
-        'width /= viewSide.toString,
-        'height /= viewSide.toString,
+        Attr(_.setAttr(XmlNs.html, "viewBox", s"0 0 ${viewSide.toString} ${viewSide.toString}")),
+        'class /= "board",
         board.data.map {
           case (point, cell) =>
             val move = calculateMove(point)
@@ -109,8 +111,8 @@ object BoardComponent {
                           circleClass: Option[String],
                           effects: Seq[Effect] = Nil)(cellClick: Point => Option[DomEvent]) = {
       ns.svg('svg)(
-        'width /= viewSide.toString,
-        'height /= viewSide.toString,
+        Attr(_.setAttr(XmlNs.html, "viewBox", s"0 0 ${viewSide.toString} ${viewSide.toString}")),
+        'class /= "board",
         board.data.map {
           case (point, cell) =>
             val x = screenPos(point.x)
@@ -214,8 +216,8 @@ object BoardComponent {
       animationDuration: FiniteDuration = 200.millis,
       animationDelay: FiniteDuration = 100.millis
   ) {
-    val cellWidth = cellRadius * 2
-    val viewSide = cellRadius + side * (cellWidth + cellGap)
+    val cellWidth: Int = cellRadius * 2
+    val viewSide: Int = side * (cellWidth + cellGap)
   }
 
   object BoardViewConfig {
