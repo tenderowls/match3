@@ -38,7 +38,7 @@ object Match3Korolev extends App {
 
   final val side = 9
   final val gameTimeout = 30.seconds
-  final val animationDuration = 360.millis
+  final val animationDuration = 350.millis
   final val maxScore = 10
 
   implicit val boardRules: Rules = new Rules {
@@ -143,6 +143,13 @@ object Match3Korolev extends App {
                       case state: State.LoggedIn =>
                         state.copy(state = State.YouLose)
                     }
+                  case PlayerActor.Event.CurrentScore(yours, opponents) =>
+                    access.maybeTransition {
+                      case state @ State.LoggedIn(_, State.Game(info, params)) =>
+                        val updatedInfo = info.copy(yourScore = yours, opponentScore = opponents)
+                        state.copy(state = State.Game(updatedInfo, params))
+                    }
+
                   case _ => ()
                 }
                 actorSystem.spawn(behavior, s"player-$id")

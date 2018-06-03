@@ -74,6 +74,8 @@ object PlayerActor {
                 Actor.same
               case Event.YouLose =>
                 Actor.same
+              case _: Event.CurrentScore =>
+                Actor.same
             }
           } onSignal {
             case (_, Terminated(`game`)) =>
@@ -94,7 +96,7 @@ object PlayerActor {
   object Event {
     final case class GameStarted(board: Board, game: ActorRef[Swap], opponent: Player) extends Event
     final case class MoveResult(batch: Batch) extends Event
-    final case class YourScore(score: Score) extends Event
+    final case class CurrentScore(your: Score, opponent: Score) extends Event
     final case class YourTurn(time: FiniteDuration) extends Event
     final case class OpponentTurn(time: FiniteDuration) extends Event
     final case class WhatsYourName(replyTo: ActorRef[String]) extends Event

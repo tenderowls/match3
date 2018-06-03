@@ -74,15 +74,11 @@ object GameActor {
 
             Actor.immutable[Event] {
               case (_, Event.TimeIsOut) =>
+                leftPlayer  ! PlayerActor.Event.EndOfTurn
+                rightPlayer ! PlayerActor.Event.EndOfTurn
                 currentPlayer match {
-                  case `leftPlayer` =>
-                    leftPlayer ! PlayerActor.Event.EndOfTurn
-                    rightPlayer ! PlayerActor.Event.EndOfTurn
-                    turn(rightPlayer, leftPlayerScore, rightPlayerScore)
-                  case `rightPlayer` =>
-                    rightPlayer ! PlayerActor.Event.EndOfTurn
-                    leftPlayer ! PlayerActor.Event.EndOfTurn
-                    turn(leftPlayer, leftPlayerScore, rightPlayerScore)
+                  case `leftPlayer` => turn(rightPlayer, leftPlayerScore, rightPlayerScore)
+                  case `rightPlayer` => turn(leftPlayer, leftPlayerScore, rightPlayerScore)
                 }
               case (_, Event.MoveResult(batch, score)) =>
                 val event = PlayerActor.Event.MoveResult(batch)
@@ -90,15 +86,13 @@ object GameActor {
                 rightPlayer ! event
                 // Be ready after animation finished
                 ctx.schedule(animationDuration * batch.length, ctx.self, Event.Ready)
+                leftPlayer ! PlayerActor.Event.EndOfTurn
+                rightPlayer ! PlayerActor.Event.EndOfTurn
+                leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, rightPlayerScore)
+                rightPlayer ! PlayerActor.Event.CurrentScore(rightPlayerScore, leftPlayerScore)
                 val nextTurn = currentPlayer match {
-                  case `leftPlayer` =>
-                    leftPlayer ! PlayerActor.Event.EndOfTurn
-                    rightPlayer ! PlayerActor.Event.EndOfTurn
-                    turn(rightPlayer, leftPlayerScore + score, rightPlayerScore)
-                  case `rightPlayer` =>
-                    rightPlayer ! PlayerActor.Event.EndOfTurn
-                    leftPlayer ! PlayerActor.Event.EndOfTurn
-                    turn(leftPlayer, leftPlayerScore, rightPlayerScore + score)
+                  case `leftPlayer` => turn(rightPlayer, leftPlayerScore + score, rightPlayerScore)
+                  case `rightPlayer` => turn(leftPlayer, leftPlayerScore, rightPlayerScore + score)
                 }
                 awaitAnimation(nextTurn)
               case (_, Event.MakeMove(client, op)) =>
