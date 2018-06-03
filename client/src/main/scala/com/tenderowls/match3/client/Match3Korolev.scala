@@ -1,10 +1,13 @@
 package com.tenderowls.match3.client
 
+import akka.actor
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import akka.typed.ActorRef
 import akka.typed.scaladsl.adapter._
+import akka.typed.scaladsl.AskPattern._
+import akka.util.Timeout
 import com.tenderowls.match3._
 import com.tenderowls.match3.client.State.GameInfo
 import com.tenderowls.match3.client.components.BoardComponent
@@ -28,12 +31,14 @@ object Match3Korolev extends App {
   import State.globalContext._
   import State.globalContext.symbolDsl._
 
-  private implicit val actorSystem: ActorSystem = ActorSystem()
+  private implicit val actorSystem: ActorSystem = ActorSystem("match3", defaultExecutionContext = Some(defaultExecutor))
   private implicit val materializer: ActorMaterializer = ActorMaterializer()
+  private implicit val askTimeout: Timeout = 1.second
+  private implicit val akkaScheduler: actor.Scheduler = actorSystem.scheduler
 
   final val side = 9
-  final val timeout = 30.seconds
-  final val animationDuration = 350.millis
+  final val gameTimeout = 30.seconds
+  final val animationDuration = 360.millis
   final val maxScore = 10
 
   implicit val boardRules: Rules = new Rules {
@@ -42,14 +47,14 @@ object Match3Korolev extends App {
       case 1 => ColorCell.GreenCell
       case 2 => ColorCell.BlueCell
       case 3 => ColorCell.YellowCell
-      case 4 => ColorCell.GrayCell
-      case 5 => ColorCell.CyanCell
+      case 4 => ColorCell.Orange
+      case 5 => ColorCell.Dark
     }
     val width: Int = side
     val height: Int = side
   }
 
-  private val lobby = actorSystem.spawn(LobbyActor(timeout, animationDuration, boardRules, maxScore), s"lobby")
+  private val lobby = actorSystem.spawn(LobbyActor(gameTimeout, animationDuration, boardRules, maxScore), s"lobby")
   private val nameInputId = elementId()
 
   private val serviceConfig = KorolevServiceConfig[Future, State, ClientEvent](
@@ -74,7 +79,7 @@ object Match3Korolev extends App {
             case ClientEvent.PlayWithBot =>
               val board = BoardGenerator.square()(boardRules)
               val bot = actorSystem.spawn(PlayerActor.bot("bot"), s"bot-${LobbyActor.mkId}")
-              val gameBehavior = GameActor(bot, player, board, timeout, animationDuration, boardRules, maxScore)
+              val gameBehavior = GameActor(player, bot, board, gameTimeout, animationDuration, boardRules, maxScore)
               lobby ! LobbyActor.Event.Leave(player)
               actorSystem.spawn(gameBehavior, s"game-${LobbyActor.mkId}")
               Future.unit
@@ -87,51 +92,57 @@ object Match3Korolev extends App {
                 val behavior = PlayerActor.localPlayer(name) {
                   case PlayerActor.Event.GameStarted(board, gameRef, opponent) =>
                     game = gameRef
-                    access.transition { _ =>
-                      val you = PlayerInfo(name)
-                      val enemy = PlayerInfo("?")
-                      val info = GameInfo(enemy, you, enemy, Score.empty, Score.empty, None)
-                      val params = BoardComponent.Params(board, Nil, 0)
-                      State.Game(info, params)
+                    opponent.?[String](PlayerActor.Event.WhatsYourName) flatMap { opponentName =>
+                      access.maybeTransition {
+                        case state: State.LoggedIn =>
+                          val you = PlayerInfo(name)
+                          val enemy = PlayerInfo(opponentName)
+                          val info = GameInfo(enemy, you, enemy, Score.empty, Score.empty, None)
+                          val params = BoardComponent.Params(board, Nil, 0)
+                          state.copy(state = State.Game(info, params))
+                      }
                     }
                   case PlayerActor.Event.YourTurn(time) =>
-                    access.transition {
-                      case game @ State.Game(info, _) =>
-                        game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time)))
+                    access.maybeTransition {
+                      case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
+                        state.copy(state = game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time))))
                     }
 
                   case PlayerActor.Event.OpponentTurn(time) =>
-                    access.transition {
-                      case game @ State.Game(info, _) =>
-                        game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time)))
+                    access.maybeTransition {
+                      case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
+                        state.copy(state = game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time))))
                     }
 
                   case PlayerActor.Event.EndOfTurn =>
-                    access.transition {
-                      case game @ State.Game(info, _) =>
-                        game.copy(info.copy(timeRemaining = None))
+                    access.maybeTransition {
+                      case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
+                        state.copy(state = game.copy(info.copy(timeRemaining = None)))
                     }
 
                   case PlayerActor.Event.MoveResult(batch) =>
-                    println(s"! move result $batch")
-                    access.transition {
-                      case State.Game(info, params) =>
-                        println(s"! transition matched")
+                    access.maybeTransition {
+                      case state @ State.LoggedIn(_, State.Game(info, params)) =>
                         val updatedParams = params.copy(
                           animationNumber = params.animationNumber + 1,
                           batch = batch
                         )
-                        State.Game(info, updatedParams)
+                        state.copy(state = State.Game(info, updatedParams))
                     }
 
                   case PlayerActor.Event.YouWin =>
                     stopPlayer()
-                    access.transition(_ => State.YouWin)
+                    access.maybeTransition {
+                      case state: State.LoggedIn =>
+                        state.copy(state = State.YouWin)
+                    }
 
                   case PlayerActor.Event.YouLose =>
                     stopPlayer()
-                    access.transition(_ => State.YouLose)
-
+                    access.maybeTransition {
+                      case state: State.LoggedIn =>
+                        state.copy(state = State.YouLose)
+                    }
                   case _ => ()
                 }
                 actorSystem.spawn(behavior, s"player-$id")
@@ -143,7 +154,8 @@ object Match3Korolev extends App {
       }
     },
     head = Seq(
-      'link('href /= "main.css", 'rel /= "stylesheet", 'type /= "text/css")
+      'link('href /= "main.css", 'rel /= "stylesheet", 'type /= "text/css"),
+      'meta('name /="viewport", 'content /= "width=device-width, initial-scale=1")
     ),
     render = {
       case State.Login =>
@@ -153,25 +165,26 @@ object Match3Korolev extends App {
             'button("Enter"),
             event('submit) { access =>
               access.property(nameInputId, 'value).flatMap { name =>
-                access.transition(_ => State.Lobby(name, lookingForOpponent = false))
+                access.transition(_ => State.LoggedIn(name, State.Lobby(lookingForOpponent = false)))
               }
             }
           )
         )
-      case State.YouWin =>
-        'body("You win", enterLobbyButton("player-unknown")) // TODO
+      case State.LoggedIn(name, State.YouWin) =>
+        'body("You win", enterLobbyButton(name))
 
-      case State.YouLose =>
-        'body("You lose", enterLobbyButton("player-unknown")) // TODO
+      case State.LoggedIn(name, State.YouLose) =>
+        'body("You lose", enterLobbyButton(name))
 
-      case State.Lobby(_, true) =>
+      case State.LoggedIn(_, State.Lobby(true)) =>
         'body(
-          "Looking for opponent...",
+          'div("Looking for opponent..."),
           'button("Play with bot", event('click)(_.publish(ClientEvent.PlayWithBot)))
         )
-      case State.Lobby(name, false) =>
+      case State.LoggedIn(name, State.Lobby(false)) =>
         'body(enterLobbyButton(name))
-      case State.Game(gameInfo, boardParams) =>
+
+      case State.LoggedIn(_, State.Game(gameInfo, boardParams)) =>
 
         def moveIndicator(player: PlayerInfo, score: Score) = {
           val thisMove = gameInfo.currentPlayer == player
@@ -190,10 +203,9 @@ object Match3Korolev extends App {
 
         'body(
           delay(1.second) { access =>
-            access.transition {
-              case game: State.Game =>
-                game.copy(info = game.info.copy(timeRemaining = game.info.timeRemaining.map(_ - 1.second)))
-              case s => s
+            access.maybeTransition {
+              case state @ State.LoggedIn(_, game: State.Game) =>
+                state.copy(state = game.copy(info = game.info.copy(timeRemaining = game.info.timeRemaining.map(_ - 1.second))))
             }
           },
           'div('class /= "game",
@@ -203,13 +215,11 @@ object Match3Korolev extends App {
                 case BoardComponent.Event.Move(swap) =>
                   access.publish(ClientEvent.MakeMove(swap))
                 case BoardComponent.Event.AddScore(score) =>
-                  access.transition {
-                    case game @ State.Game(info, _) if info.currentPlayer == info.you =>
-                      game.copy(info = info.copy(yourScore = info.yourScore + score))
-                    case game @ State.Game(info, _) if info.currentPlayer == info.opponent =>
-                      game.copy(info = info.copy(opponentScore = info.opponentScore + score))
-                    case game =>
-                      game
+                  access.maybeTransition {
+                    case state @ State.LoggedIn(_, game @ State.Game(info, _)) if info.currentPlayer == info.you =>
+                      state.copy(state = game.copy(info = info.copy(yourScore = info.yourScore + score)))
+                    case state @ State.LoggedIn(_, game @ State.Game(info, _)) if info.currentPlayer == info.opponent =>
+                      state.copy(state = game.copy(info = info.copy(opponentScore = info.opponentScore + score)))
                   }
               }
             },
@@ -228,12 +238,13 @@ object Match3Korolev extends App {
     'button(
       "Enter lobby",
       event('click) { access =>
-        access.publish(ClientEvent.EnterLobby(name)).flatMap { _ =>
-          access.transition {
-            case lobby: State.Lobby =>
-              lobby.copy(lookingForOpponent = true)
+        for {
+          _ <- access.publish(ClientEvent.EnterLobby(name))
+          _ <- access.maybeTransition {
+            case state: State.LoggedIn =>
+              state.copy(state = State.Lobby(lookingForOpponent = true))
           }
-        }
+        } yield ()
       }
     )
   }

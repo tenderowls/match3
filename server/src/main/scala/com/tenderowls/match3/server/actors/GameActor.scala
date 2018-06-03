@@ -42,7 +42,6 @@ object GameActor {
       }
 
       def awaitAnimation(turn: Behavior[Event]) = {
-        println("Became await animation")
         Actor.immutable[Event] {
           case (_, Event.Ready) => turn
           case _                => Actor.same
@@ -90,7 +89,6 @@ object GameActor {
                 leftPlayer ! event
                 rightPlayer ! event
                 // Be ready after animation finished
-                println(s"Schedule next turn on ${animationDuration * batch.length}")
                 ctx.schedule(animationDuration * batch.length, ctx.self, Event.Ready)
                 val nextTurn = currentPlayer match {
                   case `leftPlayer` =>

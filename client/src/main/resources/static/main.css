@@ -35,9 +35,14 @@ html, body
 .game {
    display: flex;
    flex-direction: column;
+   justify-content: space-between;
    width: 100%;
    max-width: 500px;
    height: 100%;
+}
+
+.board {
+  margin: 10px;
 }
 
 .move-indicator {

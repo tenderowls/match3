@@ -14,11 +14,14 @@ sealed trait State
 object State {
 
   case object Login extends State
-  case class Lobby(name: String, lookingForOpponent: Boolean) extends State
-  case class Game(info: GameInfo, boardParams: Params) extends State
-  case object YouWin extends State
-  case object YouLose extends State
-  
+  case class LoggedIn(name: String, state: LoggedInState) extends State
+
+  sealed trait LoggedInState
+  case class Lobby(lookingForOpponent: Boolean) extends LoggedInState
+  case class Game(info: GameInfo, boardParams: Params) extends LoggedInState
+  case object YouWin extends LoggedInState
+  case object YouLose extends LoggedInState
+
   case class GameInfo(
     currentPlayer: PlayerInfo,
     you: PlayerInfo,

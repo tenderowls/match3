@@ -22,7 +22,6 @@ object LobbyActor {
               val board = BoardGenerator.square()(rules)
               val gameBehavior = GameActor(pendingPlayer, player, board, timeout, animationDuration, rules, maxScore)
               ctx.spawn(gameBehavior, s"game-$mkId")
-              println(s"restPendingPlayers = $restPendingPlayers")
               matchMaking(restPendingPlayers)
           }
         case (_, Event.Leave(player)) =>

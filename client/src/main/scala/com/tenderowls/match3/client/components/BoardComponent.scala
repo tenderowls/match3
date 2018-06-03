@@ -36,16 +36,16 @@ object BoardComponent {
   }
 
   def cellToColor(c: Cell) = c match {
-    case ColorCell.RedCell    => Rgb(0xee, 0x00, 0x00)
-    case ColorCell.GreenCell  => Rgb(0x00, 0xEE, 0x00)
-    case ColorCell.BlueCell   => Rgb(0x00, 0x00, 0xEE)
-    case ColorCell.YellowCell => Rgb(0xEE, 0xEE, 0x00)
-    case ColorCell.GrayCell   => Rgb(0xCC, 0xCC, 0xCC)
-    case ColorCell.CyanCell   => Rgb(0x00, 0xFF, 0xFF)
+    case ColorCell.BlueCell   => Rgb(0x00, 0xA3, 0xFF)
+    case ColorCell.GreenCell  => Rgb(0x0C, 0xE8, 0x42)
+    case ColorCell.RedCell    => Rgb(0xFF, 0x0D, 0x2A)
+    case ColorCell.YellowCell => Rgb(0xFF, 0xF7, 0x00)
+    case ColorCell.Orange     => Rgb(0xE8, 0x86, 0x0C)
+    case ColorCell.Dark       => Rgb(0x33, 0x33, 0x33)
     case _                    => Rgb(0xFF, 0xFF, 0xFF)
   }
 
-  val create = Component[Future, State, Params, Event](State.Static(None, None, 0)) { (context, parameters, state) =>
+  val create: Component[Future, State, Params, Event] = Component[Future, State, Params, Event](State.Static(None, None, 0)) { (context, parameters, state) =>
 
     import BoardViewConfig.default._
     import context.{Event => DomEvent, _}
@@ -153,13 +153,11 @@ object BoardComponent {
               }
               swapOpt match {
                 case Some(swap) => access.publish(Event.Move(swap))
-                case None if selectedCellOpt.contains(p2) => access.transition {
+                case None if selectedCellOpt.contains(p2) => access.maybeTransition {
                   case s: State.Static => s.copy(selectedCell = None)
-                  case s => s
                 }
-                case None => access.transition {
+                case None => access.maybeTransition {
                   case s: State.Static => s.copy(selectedCell = Some(p2))
-                  case s => s
                 }
               }
             }

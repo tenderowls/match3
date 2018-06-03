@@ -9,8 +9,8 @@ object ColorCell {
   case object GreenCell extends ColorCell
   case object BlueCell extends ColorCell
   case object YellowCell extends ColorCell
-  case object GrayCell extends ColorCell
-  case object CyanCell extends ColorCell
+  case object Orange extends ColorCell
+  case object Dark extends ColorCell
 
-  final val All = Set(RedCell, GreenCell, BlueCell, YellowCell, GrayCell, CyanCell)
+  final val All = Set(RedCell, GreenCell, BlueCell, YellowCell, Orange, Dark)
 }
