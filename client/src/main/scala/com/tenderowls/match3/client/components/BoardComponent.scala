@@ -69,7 +69,7 @@ object BoardComponent {
       )
     }
 
-    def renderAnimatedBoard(board: Board, ops: List[BoardOperation])(delay: Effect) = {
+    def renderAnimatedBoard(board: Board, ops: List[BoardOperation])(onAnimationEnd: Access => Future[Unit]) = {
       def calculateMove(point: Point) = ops.collectFirst {
         case Transition(`point`, to) => to
         case Swap(`point`, to)       => to
@@ -88,7 +88,7 @@ object BoardComponent {
           'fillOpacity /= "1",
           event('transitionend) { access =>
             println("transition end")
-            Future.unit
+            onAnimationEnd(access)
           }
         ),
         board.data.map {
@@ -115,8 +115,7 @@ object BoardComponent {
               'fill /= color.toString,
               'fillOpacity /= "1"
             )
-        },
-        delay
+        }
       )
     }
 
@@ -190,27 +189,23 @@ object BoardComponent {
         val board = boardOpt.getOrElse(origBoard)
         // Enter animation
         val newBoard = board.applyOperations(ops)
-        renderAnimatedBoard(board, ops) {
-          delay(animationDuration) { access =>
-            access.transition(_ => State.AnimationEnd(an, newBoard, batch))
-          }
+        renderAnimatedBoard(board, ops) { access =>
+          access.transition(_ => State.AnimationEnd(an, newBoard, batch))
         }
       case (_, State.AnimationStart(an, board, ops :: batch)) =>
         // Do animation
-        renderAnimatedBoard(board, ops) {
-          delay(animationDuration) { access =>
-            val newBoard = board.applyOperations(ops)
-            val score = ops.foldLeft(Score.empty) {
-              case (total, BoardOperation.Update(point, Cell.EmptyCell)) =>
-                board.get(point).fold(total) {
-                  case EmptyCell => total
-                  case cell: ColorCell => total.inc(cell)
-                }
-              case (total, _) => total
-            }
-            access.publish(Event.AddScore(score)).flatMap { _ =>
-              access.transition(_ => State.AnimationEnd(an, newBoard, batch))
-            }
+        renderAnimatedBoard(board, ops) { access =>
+          val newBoard = board.applyOperations(ops)
+          val score = ops.foldLeft(Score.empty) {
+            case (total, BoardOperation.Update(point, Cell.EmptyCell)) =>
+              board.get(point).fold(total) {
+                case EmptyCell => total
+                case cell: ColorCell => total.inc(cell)
+              }
+            case (total, _) => total
+          }
+          access.publish(Event.AddScore(score)).flatMap { _ =>
+            access.transition(_ => State.AnimationEnd(an, newBoard, batch))
           }
         }
       case (_, State.AnimationEnd(an, board, batch)) =>
