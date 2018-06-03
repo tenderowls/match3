@@ -104,8 +104,12 @@ object GameActor {
               case _ =>
                 Actor.same
             } onSignal {
-              case (_, Terminated(`leftPlayer`)) => Actor.stopped
-              case (_, Terminated(`rightPlayer`)) => Actor.stopped
+              case (_, Terminated(`leftPlayer`)) =>
+                rightPlayer ! PlayerActor.Event.YouWin
+                Actor.stopped
+              case (_, Terminated(`rightPlayer`)) =>
+                leftPlayer ! PlayerActor.Event.YouWin
+                Actor.stopped
             }
           }
         }

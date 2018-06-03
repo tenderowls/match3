@@ -17,7 +17,7 @@ object State {
   case class LoggedIn(name: String, state: LoggedInState) extends State
 
   sealed trait LoggedInState
-  case class Lobby(lookingForOpponent: Boolean) extends LoggedInState
+  case object Lobby extends LoggedInState
   case class Game(info: GameInfo, boardParams: Params) extends LoggedInState
   case object YouWin extends LoggedInState
   case object YouLose extends LoggedInState

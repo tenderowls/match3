@@ -26,7 +26,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
 
-object Match3Korolev extends App {
+object Application extends App {
 
   import State.globalContext._
   import State.globalContext.symbolDsl._
@@ -167,29 +167,55 @@ object Match3Korolev extends App {
     render = {
       case State.Login =>
         'body(
-          'form(
-            'input(nameInputId, 'type /= "text"),
-            'button("Enter"),
-            event('submit) { access =>
-              access.property(nameInputId, 'value).flatMap { name =>
-                access.transition(_ => State.LoggedIn(name, State.Lobby(lookingForOpponent = false)))
+          'div('display @= "flex",
+               'alignItems @= "center",
+               'flexDirection @= "column",
+            'h3('textAlign @= "center", "Multiplayer match-three"),
+            'h6('textAlign @= "center", 'fontStyle @= "italic",// 'maxWidth @= 400,
+              "Written in Scala and Korolev by Aleksey Fomkin",
+              'a('fontStyle @= "italic", 'display @= "block", 'href /= "https://github.com/tenderowls/match3", "https://github.com/tenderowls/match3")
+            ),
+            'form('class /= "panel", 'marginTop @= 15, 'display @= "flex",
+              'input(nameInputId, 'type /= "text", 'placeholder /= "Your nickname"),
+              'button("Enter lobby"),
+              event('submit) { access =>
+                for {
+                  name <- access.property(nameInputId, 'value)
+                  _ <- access.transition(_ => State.LoggedIn(name, State.Lobby))
+                  _ <- access.publish(ClientEvent.EnterLobby(name))
+                } yield ()
               }
-            }
+            )
           )
         )
       case State.LoggedIn(name, State.YouWin) =>
-        'body("You win", enterLobbyButton(name))
+        'body(
+          'div('class /= "panel",
+            'h2("You win! ❤️"),
+            enterLobbyButton(name)
+          )
+        )
 
       case State.LoggedIn(name, State.YouLose) =>
-        'body("You lose", enterLobbyButton(name))
-
-      case State.LoggedIn(_, State.Lobby(true)) =>
         'body(
-          'div("Looking for opponent..."),
-          'button("Play with bot", event('click)(_.publish(ClientEvent.PlayWithBot)))
+          'div('class /= "panel",
+            'h2("You lose. \uD83D\uDCA9"),
+            enterLobbyButton(name)
+          )
         )
-      case State.LoggedIn(name, State.Lobby(false)) =>
-        'body(enterLobbyButton(name))
+
+      case State.LoggedIn(_, State.Lobby) =>
+        'body(
+          'div('class /= "panel",
+            'h2("Looking for opponent..."),
+            'div(
+              'button(
+                "Play with bot",
+                event('click)(_.publish(ClientEvent.PlayWithBot))
+              )
+            )
+          )
+        )
 
       case State.LoggedIn(_, State.Game(gameInfo, boardParams)) =>
 
@@ -249,7 +275,7 @@ object Match3Korolev extends App {
           _ <- access.publish(ClientEvent.EnterLobby(name))
           _ <- access.maybeTransition {
             case state: State.LoggedIn =>
-              state.copy(state = State.Lobby(lookingForOpponent = true))
+              state.copy(state = State.Lobby)
           }
         } yield ()
       }

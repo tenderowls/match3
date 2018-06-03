@@ -1,5 +1,7 @@
 html, body
 {
+    font-family: sans-serif;
+    font-size: 14pt;
     width: 100%;
     height: 100%;
     margin: 0;
@@ -10,51 +12,77 @@ html, body
     justify-content: center;
 }
 
+input {
+    font-family: sans-serif;
+    font-size: 14pt;
+    padding: 5px;
+    margin: 5px;
+    border: 2px solid #999;
+    border-radius: 10px;
+}
+
+button {
+    font-family: sans-serif;
+    font-size: 14pt;
+    padding: 5px;
+    margin: 5px;
+    border-radius: 10px;
+    background-color: #999;
+    color: white;
+}
+
 .circle-touchable {
-  transition:
-      r .3s ease
-    , fill-opacity .2s ease;
+    transition:
+        r .3s ease
+        , fill-opacity .2s ease;
 }
 
 .circle-movable {
-  transition:
-      r .3s ease
-    , cx .25s ease
-    , cy .25s ease;
+    transition:
+        r .3s ease
+        , cx .25s ease
+        , cy .25s ease;
 }
 
 .score {
-  border-radius: 10px;
+    border-radius: 10px;
 }
 
 .score-bar {
-  border-radius: 10px;
-  transition: width .3s ease;
+    border-radius: 10px;
+    transition: width .3s ease;
 }
 
 .game {
-   display: flex;
-   flex-direction: column;
-   justify-content: space-between;
-   width: 100%;
-   max-width: 500px;
-   height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 500px;
+    height: 100%;
 }
 
 .board {
   margin: 10px;
 }
 
+.panel {
+    margin: 10px;
+    padding: 10px;
+    border: 4px solid #ccc;
+    border-radius: 10px;
+}
+
 .move-indicator {
-  display: inline-block;
-  margin: 12px;
-  padding: 12px;
-  border: 0px solid #ccc;
-  border-radius: 10px;
+    display: inline-block;
+    margin: 12px;
+    padding: 12px;
+    border: 0px solid #ccc;
+    border-radius: 10px;
 }
 
 .move-indicator__current {
-  margin: 10px;
-  padding: 10px;
-  border-width: 4px;
+    margin: 10px;
+    padding: 10px;
+    border-width: 4px;
 }

@@ -12,6 +12,7 @@ import korolev.execution._
 import korolev.state.javaSerialization._
 import levsha.Document.Attr
 import levsha.XmlNs
+import levsha.events.EventPhase
 
 object BoardComponent {
 
