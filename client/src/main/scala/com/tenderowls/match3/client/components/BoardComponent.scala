@@ -78,6 +78,19 @@ object BoardComponent {
       ns.svg('svg)(
         Attr(_.setAttr(XmlNs.html, "viewBox", s"0 0 ${viewSide.toString} ${viewSide.toString}")),
         'class /= "board",
+        // Fake circle need to track transition end
+        ns.svg('circle)(
+          'class /= "circle-touchable circle-movable",
+          'cx /= "1",
+          'cy /= "1",
+          'r /= "10",
+          'fill /= "#FFFFFF",
+          'fillOpacity /= "1",
+          event('transitionend) { access =>
+            println("transition end")
+            Future.unit
+          }
+        ),
         board.data.map {
           case (point, cell) =>
             val move = calculateMove(point)
@@ -114,6 +127,15 @@ object BoardComponent {
       ns.svg('svg)(
         Attr(_.setAttr(XmlNs.html, "viewBox", s"0 0 ${viewSide.toString} ${viewSide.toString}")),
         'class /= "board",
+        // Fake circle need to track transition end
+        ns.svg('circle)(
+          'class /= "circle-touchable circle-movable",
+          'cx /= "0",
+          'cy /= "0",
+          'r /= "1",
+          'fill /= "#FFFFFF",
+          'fillOpacity /= "1"
+        ),
         board.data.map {
           case (point, cell) =>
             val x = screenPos(point.x)
