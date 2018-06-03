@@ -2,7 +2,7 @@ val akkaVersion = "2.5.8"
 val korolevVersion = "0.8.2-SNAPSHOT"
 val commonSettings = Seq(
   organization := "com.tenderowls",
-  version      := "1.0.0",
+  version      := "1.0.0-SNAPSHOT",
   scalaVersion := "2.12.4"
 )
 
@@ -25,8 +25,18 @@ lazy val server = project
   .dependsOn(match3)
 
 lazy val client = project
+  .enablePlugins(UniversalPlugin)
+  .enablePlugins(AshScriptPlugin)
+  .enablePlugins(DockerPlugin)
   .settings(commonSettings:_*)
   .settings(
+    packageName in Docker := "match3",
+    version in Docker := "1.0.0",
+    maintainer in Docker := "Aleksey Fomkin <aleksey.fomkin@gmail.com>",
+    dockerExposedPorts := Seq(8080),
+    dockerUsername := Some("fomkin"),
+    dockerUpdateLatest := true,
+    normalizedName := "match3-client",
     libraryDependencies ++= Seq(
       "com.github.fomkin" %% "korolev-server-akkahttp" % korolevVersion,
       "org.slf4j" % "slf4j-simple" % "1.7.+"
