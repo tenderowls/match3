@@ -38,7 +38,6 @@ object Application extends App {
 
   final val side = 9
   final val gameTimeout = 30.seconds
-  final val animationDuration = 350.millis
   final val maxScore = 10
 
   implicit val boardRules: Rules = new Rules {
@@ -54,7 +53,7 @@ object Application extends App {
     val height: Int = side
   }
 
-  private val lobby = actorSystem.spawn(LobbyActor(gameTimeout, animationDuration, boardRules, maxScore), s"lobby")
+  private val lobby = actorSystem.spawn(LobbyActor(gameTimeout, boardRules, maxScore), s"lobby")
   private val nameInputId = elementId()
 
   private val serviceConfig = KorolevServiceConfig[Future, State, ClientEvent](
@@ -63,7 +62,7 @@ object Application extends App {
       access.sessionId.map { qsi =>
         val id = s"${qsi.deviceId}-${qsi.id}"
         var player: ActorRef[PlayerActor.Event] = null
-        var game: ActorRef[BoardOperation.Swap] = null
+        var game: ActorRef[GameActor.Event] = null
 
         def stopPlayer(): Unit = if (player != null) {
           actorSystem.stop(player.toUntyped)
@@ -79,13 +78,13 @@ object Application extends App {
             case ClientEvent.PlayWithBot =>
               val board = BoardGenerator.square()(boardRules)
               val bot = actorSystem.spawn(PlayerActor.bot("bot"), s"bot-${LobbyActor.mkId}")
-              val gameBehavior = GameActor(player, bot, board, gameTimeout, animationDuration, boardRules, maxScore)
+              val gameBehavior = GameActor(player, bot, board, gameTimeout, boardRules, maxScore)
               lobby ! LobbyActor.Event.Leave(player)
-              actorSystem.spawn(gameBehavior, s"game-${LobbyActor.mkId}")
+              game = actorSystem.spawn(gameBehavior, s"game-${LobbyActor.mkId}")
               Future.unit
             case ClientEvent.MakeMove(swap) =>
               if (game != null)
-                game ! swap
+                game ! GameActor.Event.MakeMove(player, swap)
               Future.unit
             case ClientEvent.EnterLobby(name) =>
               player = {
@@ -103,15 +102,20 @@ object Application extends App {
                       }
                     }
                   case PlayerActor.Event.YourTurn(time) =>
-                    access.maybeTransition {
-                      case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
-                        state.copy(state = game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time))))
+                    Future.unit.flatMap { _ =>
+                      access.maybeTransition {
+                        case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
+                          state.copy(state = game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time))))
+                      }
                     }
 
                   case PlayerActor.Event.OpponentTurn(time) =>
-                    access.maybeTransition {
-                      case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
-                        state.copy(state = game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time))))
+                    Future.unit.flatMap { _ =>
+                      println("opponent turn")
+                      access.maybeTransition {
+                        case state@State.LoggedIn(_, game@State.Game(info, _)) =>
+                          state.copy(state = game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time))))
+                      }
                     }
 
                   case PlayerActor.Event.EndOfTurn =>
@@ -156,13 +160,16 @@ object Application extends App {
               }
               lobby ! LobbyActor.Event.Enter(player)
               Future.unit
+            case ClientEvent.SyncAnimation =>
+              game ! GameActor.Event.Ready
+              Future.unit
           }
         )
       }
     },
     head = Seq(
       'link('href /= "main.css", 'rel /= "stylesheet", 'type /= "text/css"),
-      'meta('name /="viewport", 'content /= "width=device-width, initial-scale=1")
+      'meta('name /="viewport", 'content /= "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no")
     ),
     render = {
       case State.Login =>
@@ -247,6 +254,8 @@ object Application extends App {
               event match {
                 case BoardComponent.Event.Move(swap) =>
                   access.publish(ClientEvent.MakeMove(swap))
+                case BoardComponent.Event.AnimationEnd =>
+                  access.publish(ClientEvent.SyncAnimation)
                 case BoardComponent.Event.AddScore(score) =>
                   access.maybeTransition {
                     case state @ State.LoggedIn(_, game @ State.Game(info, _)) if info.currentPlayer == info.you =>

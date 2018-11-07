@@ -14,6 +14,8 @@ import levsha.Document.Attr
 import levsha.XmlNs
 import levsha.events.EventPhase
 
+import scala.util.Random
+
 object BoardComponent {
 
   /**
@@ -29,6 +31,7 @@ object BoardComponent {
   object Event {
     case class Move(swap: Swap) extends Event
     case class AddScore(score: Score) extends Event
+    case object AnimationEnd extends Event
   }
 
   case class Rgb(red: Int, green: Int, blue: Int) {
@@ -36,7 +39,7 @@ object BoardComponent {
     override def toString: String = s"rgb($red, $green, $blue)"
   }
 
-  def cellToColor(c: Cell) = c match {
+  def cellToColor(c: Cell): Rgb = c match {
     case ColorCell.BlueCell   => Rgb(0x00, 0xA3, 0xFF)
     case ColorCell.GreenCell  => Rgb(0x0C, 0xE8, 0x42)
     case ColorCell.RedCell    => Rgb(0xFF, 0x0D, 0x2A)
@@ -80,16 +83,14 @@ object BoardComponent {
         'class /= "board",
         // Fake circle need to track transition end
         ns.svg('circle)(
-          'class /= "circle-touchable circle-movable",
-          'cx /= "1",
-          'cy /= "1",
+          'state /= "animated",
+          'class /= "circle-movable",
+          'cx /= (Random.nextInt(200) + 50).toString,
+          'cy /= "0",
           'r /= "10",
           'fill /= "#FFFFFF",
           'fillOpacity /= "1",
-          event('transitionend) { access =>
-            println("transition end")
-            onAnimationEnd(access)
-          }
+          event('transitionend, ignoreRenderNum = true)(onAnimationEnd)
         ),
         board.data.map {
           case (point, cell) =>
@@ -128,10 +129,11 @@ object BoardComponent {
         'class /= "board",
         // Fake circle need to track transition end
         ns.svg('circle)(
-          'class /= "circle-touchable circle-movable",
+          'state /= "static",
+          //'class /= "circle-movable",
           'cx /= "0",
           'cy /= "0",
-          'r /= "1",
+          'r /= "10",
           'fill /= "#FFFFFF",
           'fillOpacity /= "1"
         ),
@@ -190,7 +192,10 @@ object BoardComponent {
         // Enter animation
         val newBoard = board.applyOperations(ops)
         renderAnimatedBoard(board, ops) { access =>
-          access.transition(_ => State.AnimationEnd(an, newBoard, batch))
+          access.sessionId.flatMap { qsid =>
+            println(s"${qsid.deviceId.take(4)}: transition end (remove or add circles ${batch.length}")
+            access.transition(_ => State.AnimationEnd(an, newBoard, batch))
+          }
         }
       case (_, State.AnimationStart(an, board, ops :: batch)) =>
         // Do animation
@@ -204,16 +209,24 @@ object BoardComponent {
               }
             case (total, _) => total
           }
-          access.publish(Event.AddScore(score)).flatMap { _ =>
-            access.transition(_ => State.AnimationEnd(an, newBoard, batch))
-          }
+          for {
+            qsid <- access.sessionId
+            _ = println(s"${qsid.deviceId.take(4)}: transition end (remove or add circles ${batch.length}")
+            _ <- if (score.sum > 0) access.publish(Event.AddScore(score)) else Future.unit
+            _ <- access.transition(_ => State.AnimationEnd(an, newBoard, batch))
+          } yield ()
         }
       case (_, State.AnimationEnd(an, board, batch)) =>
         // End animation
         val effect = delay(animationDelay) { access =>
-          access.transition {
-            case _ if batch.isEmpty => State.Static(Some(board), None, an)
-            case _                  => State.AnimationStart(an, board, batch)
+          if (batch.isEmpty) {
+            println("animation end")
+            for {
+              _ <- access.transition(_ => State.Static(Some(board), None, an))
+              _ <- access.publish(Event.AnimationEnd)
+            } yield ()
+          } else {
+            access.transition(_ => State.AnimationStart(an, board, batch))
           }
         }
         renderStaticBoard(board, None, None, Seq(effect))(_ => None)

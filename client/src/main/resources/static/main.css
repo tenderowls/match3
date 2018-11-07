@@ -33,15 +33,15 @@ button {
 
 .circle-touchable {
     transition:
-        r .3s ease
+        r .2s ease
         , fill-opacity .2s ease;
 }
 
 .circle-movable {
     transition:
-        r .3s ease
-        , cx .25s ease
-        , cy .25s ease;
+        r .2s ease
+        , cx .2s ease
+        , cy .2s ease;
 }
 
 .score {

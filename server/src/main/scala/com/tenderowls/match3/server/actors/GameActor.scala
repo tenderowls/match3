@@ -13,7 +13,6 @@ object GameActor {
             rightPlayer: Player,
             initialBoard: Board,
             timeout: FiniteDuration,
-            animationDuration: FiniteDuration,
             match3Rules: Rules,
             maxScore: Int): Behavior[Event] = {
 
@@ -24,13 +23,13 @@ object GameActor {
 
       leftPlayer ! PlayerActor.Event.GameStarted(
         board = initialBoard,
-        game = ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(leftPlayer, op)),
+        game = ctx.self,//ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(leftPlayer, op)),
         opponent = rightPlayer
       )
 
       rightPlayer ! PlayerActor.Event.GameStarted(
         board = initialBoard,
-        game = ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(rightPlayer, op)),
+        game = ctx.self,//ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(rightPlayer, op)),
         opponent = leftPlayer
       )
 
@@ -85,7 +84,6 @@ object GameActor {
                 leftPlayer ! event
                 rightPlayer ! event
                 // Be ready after animation finished
-                ctx.schedule(animationDuration * batch.length, ctx.self, Event.Ready)
                 leftPlayer ! PlayerActor.Event.EndOfTurn
                 rightPlayer ! PlayerActor.Event.EndOfTurn
                 leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, rightPlayerScore)

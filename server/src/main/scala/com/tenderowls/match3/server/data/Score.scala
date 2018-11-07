@@ -17,6 +17,8 @@ case class Score(data: Map[ColorCell, Int]) extends AnyVal { a =>
     Score(sum.toMap)
   }
 
+  def sum: Int = data.values.sum
+
   override def toString: String = {
     val xs = data.map { case (k, v) => s"${k.getClass.getSimpleName.dropRight(5).toLowerCase()}=$v" }
     s"Score(${xs.mkString(",")})"
