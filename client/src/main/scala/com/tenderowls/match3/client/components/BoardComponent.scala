@@ -56,7 +56,7 @@ object BoardComponent {
     import symbolDsl._
 
     def screenPos(n: Int): Double = {
-      cellRadius + n * (cellWidth + cellGap)
+      n * (cellWidth + cellGap)
     }
 
     def neighbours(p: Point): List[Point] = {
@@ -78,42 +78,44 @@ object BoardComponent {
         case Swap(`point`, to)       => to
         case Swap(to, `point`)       => to
       }
-      ns.svg('svg)(
-        Attr(_.setAttr(XmlNs.html, "viewBox", s"0 0 ${viewSide.toString} ${viewSide.toString}")),
+      'div(
         'class /= "board",
         // Fake circle need to track transition end
-        ns.svg('circle)(
+        'div(
           'state /= "animated",
-          'class /= "circle-movable",
-          'cx /= (Random.nextInt(200) + 50).toString,
-          'cy /= "0",
-          'r /= "10",
-          'fill /= "#FFFFFF",
-          'fillOpacity /= "1",
+          'class /= "circle circle-movable",
+          'left @= (Random.nextInt(200) + 50),
+          'top @= 0,
+          'width @= 20,
+          'height @= 20,
+          'backgroundColor @= "#FFFFFF",
           event('transitionend, ignoreRenderNum = true)(onAnimationEnd)
         ),
         board.data.map {
           case (point, cell) =>
             val move = calculateMove(point)
-            val x = move.fold(screenPos(point.x))(p => screenPos(p.x))
-            val y = move.fold(screenPos(point.y))(p => screenPos(p.y))
             val isEmptyCell = cell == Cell.EmptyCell
             val updateToNonEmpty = ops.collectFirst {
               case Update(p, c) if p == point && c != EmptyCell => c
             }
             val color = cellToColor(updateToNonEmpty.getOrElse(cell))
-            val radius = {
+            val vsd = viewSide.toDouble
+            val wh = {
               if (ops.contains(Update(point, Cell.EmptyCell))) 0
-              else if (updateToNonEmpty.nonEmpty) cellRadius
+              else if (updateToNonEmpty.nonEmpty) cellWidth
               else if (isEmptyCell) 0
-              else cellRadius
-            }
-            ns.svg('circle)(
-              'class /= "circle-touchable circle-movable",
-              'cx /= x.toString,
-              'cy /= y.toString,
-              'r /= radius.toString,
-              'fill /= color.toString,
+              else cellWidth
+            } / vsd * 100
+            val xyk = if (wh == 0) cellRadius else 0
+            val x = ((move.fold(screenPos(point.x))(p => screenPos(p.x)) + xyk) / vsd * 100) + "%"
+            val y = ((move.fold(screenPos(point.y))(p => screenPos(p.y)) + xyk) / vsd * 100) + "%"
+            'div(
+              'left @= x,
+              'top @= y,
+              'width @= (wh + "%"),
+              'height @= (wh + "%"),
+              'backgroundColor @= color.toString,
+              'class /= "circle circle-touchable circle-movable",
               'fillOpacity /= "1"
             )
         }
@@ -124,39 +126,41 @@ object BoardComponent {
                           selectedCellOpt: Option[Point],
                           circleClass: Option[String],
                           effects: Seq[Effect] = Nil)(cellClick: Point => Option[DomEvent]) = {
-      ns.svg('svg)(
-        Attr(_.setAttr(XmlNs.html, "viewBox", s"0 0 ${viewSide.toString} ${viewSide.toString}")),
+      'div(
         'class /= "board",
         // Fake circle need to track transition end
-        ns.svg('circle)(
+        'div(
           'state /= "static",
-          //'class /= "circle-movable",
-          'cx /= "0",
-          'cy /= "0",
-          'r /= "10",
-          'fill /= "#FFFFFF",
-          'fillOpacity /= "1"
+          'class /= "circle",
+          'left @= 0,
+          'top @= 0,
+          'width @= 20,
+          'height @= 20,
+          'backgroundColor @= "#FFFFFF"
         ),
         board.data.map {
           case (point, cell) =>
-            val x = screenPos(point.x)
-            val y = screenPos(point.y)
-            val radius = {
+            val vsd = viewSide.toDouble
+            val wh = {
               if (cell == Cell.EmptyCell) 0
-              else if (selectedCellOpt.contains(point)) cellRadius + cellGap / 2
-              else cellRadius
-            }
+              else if (selectedCellOpt.contains(point)) cellWidth + cellGap
+              else cellWidth
+            } / vsd * 100
+            val xyk = if (wh == 0) cellRadius else 0
+            val x = ((screenPos(point.x) + xyk) / vsd * 100) + "%"
+            val y = ((screenPos(point.y) + xyk) / vsd * 100) + "%"
             val opacity = selectedCellOpt.fold(1d) { selectedCell =>
               if (point == selectedCell) 1d
               else if (neighbours(selectedCell).contains(point)) 1d
               else 0.09d
             }
-            ns.svg('circle)(
-              circleClass.map(x => 'class /= x),
-              'cx /= x.toString,
-              'cy /= y.toString,
-              'r /= radius.toString,
-              'fill /= cellToColor(cell).toString,
+            'div(
+              'left @= x,
+              'top @= y,
+              'backgroundColor @= cellToColor(cell).toString,
+              'width @= (wh + "%"),
+              'height @= (wh + "%"),
+              'class /= "circle " + circleClass.getOrElse(""),
               'fillOpacity /= opacity.toString,
               cellClick(point)
             )
@@ -241,7 +245,7 @@ object BoardComponent {
   case class BoardViewConfig(
       side: Int = 9,
       cellRadius: Int = 15,
-      cellGap: Int = 2,
+      cellGap: Int = 4,
       animationDuration: FiniteDuration = 200.millis,
       animationDelay: FiniteDuration = 100.millis
   ) {

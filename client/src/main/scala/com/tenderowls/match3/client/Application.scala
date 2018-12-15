@@ -37,7 +37,7 @@ object Application extends App {
   private implicit val akkaScheduler: actor.Scheduler = actorSystem.scheduler
 
   final val side = 9
-  final val gameTimeout = 30.seconds
+  final val gameTimeout = 3600.seconds
   final val maxScore = 10
 
   implicit val boardRules: Rules = new Rules {

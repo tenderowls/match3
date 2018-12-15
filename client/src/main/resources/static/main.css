@@ -31,17 +31,26 @@ button {
     color: white;
 }
 
+.circle {
+    position: absolute;
+    border-radius: 50px;
+}
+
 .circle-touchable {
     transition:
-        r .2s ease
-        , fill-opacity .2s ease;
+        width .2s ease
+        , height .2s ease
+        , fill-opacity .2s ease
+        , left .2s ease
+        , top .2s ease;
 }
 
 .circle-movable {
     transition:
-        r .2s ease
-        , cx .2s ease
-        , cy .2s ease;
+        width .2s ease
+        , height .2s ease
+        , left .2s ease
+        , top .2s ease;
 }
 
 .score {
@@ -63,7 +72,10 @@ button {
 }
 
 .board {
-  margin: 10px;
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 100%;
 }
 
 .panel {
