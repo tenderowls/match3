@@ -1,9 +1,9 @@
-val akkaVersion = "2.5.8"
-val korolevVersion = "0.8.2-SNAPSHOT"
+val akkaVersion = "2.5.19"
+val korolevVersion = "0.9.0"
 val commonSettings = Seq(
   organization := "com.tenderowls",
   version      := "1.0.0-SNAPSHOT",
-  scalaVersion := "2.12.4"
+  scalaVersion := "2.12.8"
 )
 
 lazy val match3 = project
@@ -18,8 +18,7 @@ lazy val server = project
   .settings(
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-      "com.typesafe.akka" %% "akka-typed" % akkaVersion
+      "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion
     )
   )
   .dependsOn(match3)

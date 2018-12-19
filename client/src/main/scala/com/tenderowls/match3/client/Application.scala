@@ -4,9 +4,9 @@ import akka.actor
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
-import akka.typed.ActorRef
-import akka.typed.scaladsl.adapter._
-import akka.typed.scaladsl.AskPattern._
+import akka.actor.typed.ActorRef
+import akka.actor.typed.scaladsl.adapter._
+import akka.actor.typed.scaladsl.AskPattern._
 import akka.util.Timeout
 import com.tenderowls.match3._
 import com.tenderowls.match3.client.State.GameInfo
@@ -147,12 +147,13 @@ object Application extends App {
                       case state: State.LoggedIn =>
                         state.copy(state = State.YouLose)
                     }
-                  case PlayerActor.Event.CurrentScore(yours, opponents) =>
-                    access.maybeTransition {
-                      case state @ State.LoggedIn(_, State.Game(info, params)) =>
-                        val updatedInfo = info.copy(yourScore = yours, opponentScore = opponents)
-                        state.copy(state = State.Game(updatedInfo, params))
-                    }
+                  case score @ PlayerActor.Event.CurrentScore(yours, opponents) =>
+                    println(score)
+//                    access.maybeTransition {
+//                      case state @ State.LoggedIn(_, State.Game(info, params)) =>
+//                        val updatedInfo = info.copy(yourScore = yours, opponentScore = opponents)
+//                        state.copy(state = State.Game(updatedInfo, params))
+//                    }
 
                   case _ => ()
                 }
@@ -161,7 +162,7 @@ object Application extends App {
               lobby ! LobbyActor.Event.Enter(player)
               Future.unit
             case ClientEvent.SyncAnimation =>
-              game ! GameActor.Event.Ready
+              game ! GameActor.Event.AnimationFinished
               Future.unit
           }
         )

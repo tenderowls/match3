@@ -1,7 +1,7 @@
 package com.tenderowls.match3.server.actors
 
-import akka.typed._
-import akka.typed.scaladsl.Actor
+import akka.actor.typed.{Behavior, Terminated}
+import akka.actor.typed.scaladsl.Behaviors
 import com.tenderowls.match3.server.data.Score
 import com.tenderowls.match3._
 
@@ -16,7 +16,7 @@ object GameActor {
             match3Rules: Rules,
             maxScore: Int): Behavior[Event] = {
 
-    Actor.deferred[Event] { ctx =>
+    Behaviors.setup[Event] { ctx =>
 
       ctx.watch(leftPlayer)
       ctx.watch(rightPlayer)
@@ -34,31 +34,31 @@ object GameActor {
       )
 
       val boardActor = {
-        val proxy = ctx.spawnAdapter { result: BoardActor.Result =>
+        val proxy = ctx.messageAdapter { result: BoardActor.Result =>
           Event.MoveResult(result.batch, result.score)
         }
         ctx.spawn(BoardActor(proxy, initialBoard, match3Rules), "board")
       }
 
       def awaitAnimation(turn: Behavior[Event]) = {
-        Actor.immutable[Event] {
-          case (_, Event.Ready) => turn
-          case _                => Actor.same
+        Behaviors.receive[Event] {
+          case (_, Event.AnimationFinished) => turn
+          case _                => Behaviors.same
         }
       }
 
       def turn(currentPlayer: Player, leftPlayerScore: Score, rightPlayerScore: Score): Behavior[Event] = {
-        Actor.deferred[Event] { ctx =>
+        Behaviors.setup[Event] { ctx =>
 
           if (leftPlayerScore.exists(_ >= maxScore)) {
             leftPlayer ! PlayerActor.Event.YouWin
             rightPlayer ! PlayerActor.Event.YouLose
-            Actor.stopped
+            Behaviors.stopped
           }
           else if (rightPlayerScore.exists(_ >= maxScore)) {
             leftPlayer ! PlayerActor.Event.YouLose
             rightPlayer ! PlayerActor.Event.YouWin
-            Actor.stopped
+            Behaviors.stopped
           }
           else {
             if (currentPlayer == leftPlayer) {
@@ -69,9 +69,9 @@ object GameActor {
               leftPlayer ! PlayerActor.Event.OpponentTurn(timeout)
             }
 
-            val timeoutSchedule = ctx.schedule(timeout, ctx.self, Event.TimeIsOut)
+            val timeoutSchedule = ctx.scheduleOnce(timeout, ctx.self, Event.TimeIsOut)
 
-            Actor.immutable[Event] {
+            Behaviors.receive[Event] {
               case (_, Event.TimeIsOut) =>
                 leftPlayer  ! PlayerActor.Event.EndOfTurn
                 rightPlayer ! PlayerActor.Event.EndOfTurn
@@ -86,11 +86,17 @@ object GameActor {
                 // Be ready after animation finished
                 leftPlayer ! PlayerActor.Event.EndOfTurn
                 rightPlayer ! PlayerActor.Event.EndOfTurn
-                leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, rightPlayerScore)
-                rightPlayer ! PlayerActor.Event.CurrentScore(rightPlayerScore, leftPlayerScore)
                 val nextTurn = currentPlayer match {
-                  case `leftPlayer` => turn(rightPlayer, leftPlayerScore + score, rightPlayerScore)
-                  case `rightPlayer` => turn(leftPlayer, leftPlayerScore, rightPlayerScore + score)
+                  case `leftPlayer` =>
+                    val newLeftPlayerScore = leftPlayerScore + score
+                    leftPlayer  ! PlayerActor.Event.CurrentScore(newLeftPlayerScore, rightPlayerScore)
+                    rightPlayer ! PlayerActor.Event.CurrentScore(rightPlayerScore, newLeftPlayerScore)
+                    turn(rightPlayer, newLeftPlayerScore, rightPlayerScore)
+                  case `rightPlayer` =>
+                    val newRightPlayerScore = rightPlayerScore + score
+                    leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, newRightPlayerScore)
+                    rightPlayer ! PlayerActor.Event.CurrentScore(newRightPlayerScore, leftPlayerScore)
+                    turn(leftPlayer, leftPlayerScore, newRightPlayerScore)
                 }
                 awaitAnimation(nextTurn)
               case (_, Event.MakeMove(client, op)) =>
@@ -98,16 +104,16 @@ object GameActor {
                   timeoutSchedule.cancel()
                   boardActor ! op
                 }
-                Actor.same[Event]
+                Behaviors.same[Event]
               case _ =>
-                Actor.same
-            } onSignal {
+                Behaviors.same
+            }.receiveSignal {
               case (_, Terminated(`leftPlayer`)) =>
                 rightPlayer ! PlayerActor.Event.YouWin
-                Actor.stopped
+                Behaviors.stopped
               case (_, Terminated(`rightPlayer`)) =>
                 leftPlayer ! PlayerActor.Event.YouWin
-                Actor.stopped
+                Behaviors.stopped
             }
           }
         }
@@ -121,9 +127,35 @@ object GameActor {
   sealed trait Event
 
   object Event {
+
+    // From board processor
+
+    /**
+      * Board sends move calculation result.
+      */
     final case class MoveResult(batch: Batch, score: Score) extends Event
-    final case class MakeMove(client: Player, op: BoardOperation.Swap) extends Event
+
+    // From scheduler
+
+    /**
+      * Scheduler sends this event when turn
+      * should be finished due to timeout.
+      */
     case object TimeIsOut extends Event
-    case object Ready extends Event
+
+    // From players
+
+    /**
+      * Players send it's decision.
+      */
+    final case class MakeMove(client: Player, op: BoardOperation.Swap) extends Event
+
+    /**
+      * Notify game that animation finished and
+      * next turn can be started. Any player can
+      * send this event. It's guarantees that no
+      * one of player is cheating.
+      */
+    case object AnimationFinished extends Event
   }
 }

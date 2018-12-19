@@ -1,6 +1,6 @@
 package com.tenderowls.match3.server
 
-import akka.typed.ActorRef
+import akka.actor.typed.ActorRef
 import com.tenderowls.match3.BoardOperation
 
 package object actors {

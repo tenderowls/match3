@@ -1,7 +1,7 @@
 package com.tenderowls.match3.server.actors
 
-import akka.typed._
-import akka.typed.scaladsl._
+import akka.actor.typed.{ActorRef, Behavior, Terminated}
+import akka.actor.typed.scaladsl.Behaviors
 import com.tenderowls.match3.BoardOperation.{Swap, Update}
 import com.tenderowls.match3.server.data.Score
 import com.tenderowls.match3.{Board, BoardAdviser}
@@ -36,13 +36,13 @@ object PlayerActor {
   }
 
   def localPlayer[U](name: String)(onEvent: PartialFunction[Event, U]): Behavior[Event] = {
-    Actor.immutable[Event] {
+    Behaviors.receive[Event] {
       case (_, Event.WhatsYourName(replyTo)) =>
         replyTo ! name
-        Actor.same
+        Behaviors.same
       case (_, event) =>
         onEvent(event)
-        Actor.same
+        Behaviors.same
     }
 //    Actor.immutable[Event] {
 //      case (ctx, msg @ Event.GameStarted(initialBoard, game, _)) =>
@@ -83,46 +83,50 @@ object PlayerActor {
 
   def bot(botName: String): Behavior[Event] = {
 
-    Actor.immutable[Event] {
+    Behaviors.receive[Event] {
       case (ctx, Event.GameStarted(initialBoard, game, _)) =>
         ctx.watch(game)
         def ready(board: Board): Behavior[Event] = {
-          Actor.immutable[Event] { (_, msg) =>
+          Behaviors.receive[Event] { (_, msg) =>
             msg match {
               case Event.EndOfTurn =>
-                Actor.same
+                Behaviors.same
               case Event.MoveResult(batch) =>
-                ready(board.applyOperations(batch.flatten))
+                val flatBatch = batch.flatten
+                // TODO export animation time to config
+//                val delay = 0.2.seconds * flatBatch.length
+//                ctx.schedule(delay, game, GameActor.Event.AnimationFinished)
+                ready(board.applyOperations(flatBatch))
               case Event.WhatsYourName(replyTo) =>
                 replyTo ! botName
-                Actor.same
+                Behaviors.same
               case _: Event.YourTurn =>
                 suggestSwap(board).foreach { swap =>
                   game ! GameActor.Event.MakeMove(ctx.self, swap)
                 }
-                Actor.same
+                Behaviors.same
               case _: Event.OpponentTurn =>
-                Actor.same
+                Behaviors.same
               case _: Event.GameStarted =>
-                Actor.same
+                Behaviors.same
               case Event.YouWin =>
-                Actor.same
+                Behaviors.same
               case Event.YouLose =>
-                Actor.same
+                Behaviors.same
               case _: Event.CurrentScore =>
-                Actor.same
+                Behaviors.same
             }
-          } onSignal {
+          } receiveSignal {
             case (_, Terminated(`game`)) =>
-              Actor.stopped
+              Behaviors.stopped
           }
         }
         ready(initialBoard)
       case (_, Event.WhatsYourName(replyTo)) =>
         replyTo ! botName
-        Actor.same
+        Behaviors.same
       case _ =>
-        Actor.same
+        Behaviors.same
     }
   }
 

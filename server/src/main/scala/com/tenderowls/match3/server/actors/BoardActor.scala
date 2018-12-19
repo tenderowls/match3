@@ -1,14 +1,14 @@
 package com.tenderowls.match3.server.actors
 
-import akka.typed._
-import akka.typed.scaladsl.Actor
+import akka.actor.typed._
+import akka.actor.typed.scaladsl.Behaviors
 import com.tenderowls.match3.server.data.{ColorCell, Score}
 import com.tenderowls.match3.BoardOperation.{Swap, Update}
 import com.tenderowls.match3._
 
 object BoardActor {
 
-  def apply(client: ActorRef[Result], board: Board, rules: Rules): Actor.Immutable[BoardOperation.Swap] = {
+  def apply(client: ActorRef[Result], board: Board, rules: Rules): Behavior[BoardOperation.Swap] = {
 
     def processSwap(board: Board, swap: Swap): Result = {
 
@@ -64,7 +64,7 @@ object BoardActor {
       )
     }
 
-    Actor.immutable {
+    Behaviors.receive {
       case (_, swap) ⇒
         val result = processSwap(board, swap)
         val updatedBoard = board.applyOperations(result.batch.flatten)

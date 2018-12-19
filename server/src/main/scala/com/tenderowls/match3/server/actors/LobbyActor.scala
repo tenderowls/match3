@@ -1,7 +1,7 @@
 package com.tenderowls.match3.server.actors
 
-import akka.typed._
-import akka.typed.scaladsl._
+import akka.actor.typed.Behavior
+import akka.actor.typed.scaladsl.Behaviors
 import com.tenderowls.match3.{BoardGenerator, Rules}
 
 import scala.concurrent.duration.FiniteDuration
@@ -13,7 +13,7 @@ object LobbyActor {
 
   def apply(timeout: FiniteDuration, rules: Rules, maxScore: Int): Behavior[Event] = {
     def matchMaking(pendingPlayers: List[Player]): Behavior[Event] = {
-      Actor.immutable[Event] {
+      Behaviors.receive[Event] {
         case (ctx, Event.Enter(player)) =>
           pendingPlayers match {
             case Nil =>
@@ -27,7 +27,7 @@ object LobbyActor {
         case (_, Event.Leave(player)) =>
           matchMaking(pendingPlayers.filter(_ != player))
         case _ =>
-          Actor.same
+          Behaviors.same
       }
     }
     matchMaking(Nil)

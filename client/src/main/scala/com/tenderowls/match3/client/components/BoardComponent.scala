@@ -89,7 +89,7 @@ object BoardComponent {
           'width @= 20,
           'height @= 20,
           'backgroundColor @= "#FFFFFF",
-          event('transitionend, ignoreRenderNum = true)(onAnimationEnd)
+          event('transitionend)(onAnimationEnd)
         ),
         board.data.map {
           case (point, cell) =>
@@ -125,7 +125,7 @@ object BoardComponent {
     def renderStaticBoard(board: Board,
                           selectedCellOpt: Option[Point],
                           circleClass: Option[String],
-                          effects: Seq[Effect] = Nil)(cellClick: Point => Option[DomEvent]) = {
+                          effects: Seq[Effect] = Nil)(cellClick: Point => Option[Access => Future[Unit]]) = {
       'div(
         'class /= "board",
         // Fake circle need to track transition end
@@ -140,6 +140,7 @@ object BoardComponent {
         ),
         board.data.map {
           case (point, cell) =>
+            val eventHandler = cellClick(point)
             val vsd = viewSide.toDouble
             val wh = {
               if (cell == Cell.EmptyCell) 0
@@ -162,7 +163,8 @@ object BoardComponent {
               'height @= (wh + "%"),
               'class /= "circle " + circleClass.getOrElse(""),
               'fillOpacity /= opacity.toString,
-              cellClick(point)
+              eventHandler.map(f => event('mousedown)(f)),
+              eventHandler.map(f => event('touchend)(f))
             )
         },
         effects
@@ -174,7 +176,7 @@ object BoardComponent {
         val board = boardOpt.getOrElse(origBoard)
         renderStaticBoard(board, selectedCellOpt, Some("circle-touchable")) { p2 =>
           Some {
-            event('mousedown) { access =>
+            { access =>
               val swapOpt = selectedCellOpt.flatMap { p1 =>
                 if (neighbours(p1).contains(p2)) Some(Swap(p1, p2))
                 else None
