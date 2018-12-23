@@ -44,30 +44,31 @@ object PlayerActor {
         onEvent(event)
         Behaviors.same
     }
-//    Actor.immutable[Event] {
-//      case (ctx, msg @ Event.GameStarted(initialBoard, game, _)) =>
+//    Behaviors.receive[Event] {
+//      case (ctx, msg @ Event.GameStarted(_, initialBoard, game, _)) =>
 //        ctx.watch(game)
 //        def ready(board: Board): Behavior[Event] = {
-//          Actor.immutable[Event] { (_, msg) =>
+//          Behaviors.receive[Event] { (_, msg) =>
 //            onEvent(msg)
 //            msg match {
 //              case Event.EndOfTurn =>
-//                Actor.same
+//                Behaviors.same
 //              case Event.MoveResult(batch) =>
 //                ready(board.applyOperations(batch.flatten))
 //              case Event.WhatsYourName(replyTo) =>
 //                replyTo ! name
-//                Actor.same
+//                Behaviors.same
 //              case _: Event.YourTurn =>
 //                suggestSwap(board).foreach { swap =>
+////                  ctx.scheduleOnce(0.5.seconds, game, GameActor.Event.MakeMove(ctx.self, swap))
 //                  game ! GameActor.Event.MakeMove(ctx.self, swap)
 //                }
-//                Actor.same
-//              case _ => Actor.same
+//                Behaviors.same
+//              case _ => Behaviors.same
 //            }
-//          } onSignal {
+//          } receiveSignal {
 //            case (_, Terminated(`game`)) =>
-//              Actor.stopped
+//              Behaviors.stopped
 //          }
 //        }
 //        println("autopray ready")
@@ -75,16 +76,16 @@ object PlayerActor {
 //        ready(initialBoard)
 //      case (_, Event.WhatsYourName(replyTo)) =>
 //        replyTo ! name
-//        Actor.same
+//        Behaviors.same
 //      case _ =>
-//        Actor.same
+//        Behaviors.same
 //    }
   }
 
   def bot(botName: String): Behavior[Event] = {
 
     Behaviors.receive[Event] {
-      case (ctx, Event.GameStarted(initialBoard, game, _)) =>
+      case (ctx, Event.GameStarted(_, initialBoard, game, _)) =>
         ctx.watch(game)
         def ready(board: Board): Behavior[Event] = {
           Behaviors.receive[Event] { (_, msg) =>
@@ -94,8 +95,8 @@ object PlayerActor {
               case Event.MoveResult(batch) =>
                 val flatBatch = batch.flatten
                 // TODO export animation time to config
-//                val delay = 0.2.seconds * flatBatch.length
-//                ctx.schedule(delay, game, GameActor.Event.AnimationFinished)
+                val delay = .2.seconds * batch.length
+                ctx.scheduleOnce(delay, game, GameActor.Event.AnimationFinished)
                 ready(board.applyOperations(flatBatch))
               case Event.WhatsYourName(replyTo) =>
                 replyTo ! botName
@@ -133,7 +134,7 @@ object PlayerActor {
   sealed trait Event
 
   object Event {
-    final case class GameStarted(board: Board, game: Game, opponent: Player) extends Event
+    final case class GameStarted(yourTurn: Boolean, board: Board, game: Game, opponent: Player) extends Event
     final case class MoveResult(batch: Batch) extends Event
     final case class CurrentScore(your: Score, opponent: Score) extends Event
     final case class YourTurn(time: FiniteDuration) extends Event

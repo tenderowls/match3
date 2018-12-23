@@ -1,6 +1,6 @@
 package com.tenderowls.match3.server.actors
 
-import akka.actor.typed.Behavior
+import akka.actor.typed.{Behavior, Terminated}
 import akka.actor.typed.scaladsl.Behaviors
 import com.tenderowls.match3.{BoardGenerator, Rules}
 
@@ -15,6 +15,7 @@ object LobbyActor {
     def matchMaking(pendingPlayers: List[Player]): Behavior[Event] = {
       Behaviors.receive[Event] {
         case (ctx, Event.Enter(player)) =>
+          ctx.watch(player)
           pendingPlayers match {
             case Nil =>
               matchMaking(List(player))
@@ -28,6 +29,9 @@ object LobbyActor {
           matchMaking(pendingPlayers.filter(_ != player))
         case _ =>
           Behaviors.same
+      } receiveSignal {
+        case (_, Terminated(player)) =>
+          matchMaking(pendingPlayers.filter(_ != player))
       }
     }
     matchMaking(Nil)

@@ -84,7 +84,7 @@ object BoardComponent {
         'div(
           'state /= "animated",
           'class /= "circle circle-movable",
-          'left @= (Random.nextInt(200) + 50),
+          'left @= (Random.nextInt(49) + 51) + "%",
           'top @= 0,
           'width @= 20,
           'height @= 20,
@@ -125,18 +125,21 @@ object BoardComponent {
     def renderStaticBoard(board: Board,
                           selectedCellOpt: Option[Point],
                           circleClass: Option[String],
-                          effects: Seq[Effect] = Nil)(cellClick: Point => Option[Access => Future[Unit]]) = {
+                          effects: Seq[Effect] = Nil)
+                         (cellClick: Point => Option[Access => Future[Unit]],
+                          onAnimationEnd: Option[Access => Future[Unit]] = None) = {
       'div(
         'class /= "board",
         // Fake circle need to track transition end
         'div(
           'state /= "static",
-          'class /= "circle",
-          'left @= 0,
+          'class /= "circle circle-movable",
+          'left @= Random.nextInt(50) + "%",
           'top @= 0,
           'width @= 20,
           'height @= 20,
-          'backgroundColor @= "#FFFFFF"
+          'backgroundColor @= "#FFFFFF",
+          onAnimationEnd.map(event('transitionend)(_))
         ),
         board.data.map {
           case (point, cell) =>
@@ -223,19 +226,34 @@ object BoardComponent {
           } yield ()
         }
       case (_, State.AnimationEnd(an, board, batch)) =>
-        // End animation
-        val effect = delay(animationDelay) { access =>
-          if (batch.isEmpty) {
-            println("animation end")
-            for {
-              _ <- access.transition(_ => State.Static(Some(board), None, an))
-              _ <- access.publish(Event.AnimationEnd)
-            } yield ()
-          } else {
-            access.transition(_ => State.AnimationStart(an, board, batch))
+//        // End animation
+//        val effect = delay(animationDelay) { access =>
+//          if (batch.isEmpty) {
+//            println("animation end")
+//            for {
+//              _ <- access.transition(_ => State.Static(Some(board), None, an))
+//              _ <- access.publish(Event.AnimationEnd)
+//            } yield ()
+//          } else {
+//            access.transition(_ => State.AnimationStart(an, board, batch))
+//          }
+//        }
+//        renderStaticBoard(board, None, None, Seq(effect))(_ => None)
+        renderStaticBoard(board, None, None, Nil)(
+          cellClick = _ => None,
+          onAnimationEnd = Some {
+            access: Access => {
+              if (batch.isEmpty) {
+                for {
+                  _ <- access.transition(_ => State.Static(Some(board), None, an))
+                  _ <- access.publish(Event.AnimationEnd)
+                } yield ()
+              } else {
+                access.transition(_ => State.AnimationStart(an, board, batch))
+              }
+            }
           }
-        }
-        renderStaticBoard(board, None, None, Seq(effect))(_ => None)
+        )
     }
   }
 

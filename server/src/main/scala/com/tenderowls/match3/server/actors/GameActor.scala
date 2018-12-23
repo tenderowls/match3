@@ -22,12 +22,14 @@ object GameActor {
       ctx.watch(rightPlayer)
 
       leftPlayer ! PlayerActor.Event.GameStarted(
+        yourTurn = true,
         board = initialBoard,
         game = ctx.self,//ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(leftPlayer, op)),
         opponent = rightPlayer
       )
 
       rightPlayer ! PlayerActor.Event.GameStarted(
+        yourTurn = false,
         board = initialBoard,
         game = ctx.self,//ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(rightPlayer, op)),
         opponent = leftPlayer
@@ -40,11 +42,19 @@ object GameActor {
         ctx.spawn(BoardActor(proxy, initialBoard, match3Rules), "board")
       }
 
-      def awaitAnimation(turn: Behavior[Event]) = {
+      def awaitAnimation(turn: Behavior[Event], counter: Int = 1): Behavior[Event] = {
         Behaviors.receive[Event] {
-          case (_, Event.AnimationFinished) => turn
-          case _                => Behaviors.same
+          case (_, Event.AnimationFinished) if counter == 2 => turn
+          case (_, Event.AnimationFinished) => awaitAnimation(turn, counter + 1)
+          case _ => Behaviors.same
         }
+      } receiveSignal {
+        case (_, Terminated(`leftPlayer`)) =>
+          rightPlayer ! PlayerActor.Event.YouWin
+          Behaviors.stopped
+        case (_, Terminated(`rightPlayer`)) =>
+          leftPlayer ! PlayerActor.Event.YouWin
+          Behaviors.stopped
       }
 
       def turn(currentPlayer: Player, leftPlayerScore: Score, rightPlayerScore: Score): Behavior[Event] = {
@@ -86,19 +96,19 @@ object GameActor {
                 // Be ready after animation finished
                 leftPlayer ! PlayerActor.Event.EndOfTurn
                 rightPlayer ! PlayerActor.Event.EndOfTurn
-                val nextTurn = currentPlayer match {
+                currentPlayer match {
                   case `leftPlayer` =>
                     val newLeftPlayerScore = leftPlayerScore + score
                     leftPlayer  ! PlayerActor.Event.CurrentScore(newLeftPlayerScore, rightPlayerScore)
                     rightPlayer ! PlayerActor.Event.CurrentScore(rightPlayerScore, newLeftPlayerScore)
-                    turn(rightPlayer, newLeftPlayerScore, rightPlayerScore)
+                    awaitAnimation(turn(rightPlayer, newLeftPlayerScore, rightPlayerScore))
                   case `rightPlayer` =>
                     val newRightPlayerScore = rightPlayerScore + score
                     leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, newRightPlayerScore)
                     rightPlayer ! PlayerActor.Event.CurrentScore(newRightPlayerScore, leftPlayerScore)
-                    turn(leftPlayer, leftPlayerScore, newRightPlayerScore)
+                    awaitAnimation(turn(leftPlayer, leftPlayerScore, newRightPlayerScore))
                 }
-                awaitAnimation(nextTurn)
+
               case (_, Event.MakeMove(client, op)) =>
                 if (client == currentPlayer) {
                   timeoutSchedule.cancel()
@@ -107,7 +117,7 @@ object GameActor {
                 Behaviors.same[Event]
               case _ =>
                 Behaviors.same
-            }.receiveSignal {
+            } receiveSignal {
               case (_, Terminated(`leftPlayer`)) =>
                 rightPlayer ! PlayerActor.Event.YouWin
                 Behaviors.stopped
@@ -152,9 +162,8 @@ object GameActor {
 
     /**
       * Notify game that animation finished and
-      * next turn can be started. Any player can
-      * send this event. It's guarantees that no
-      * one of player is cheating.
+      * next turn can be started. Both players should
+      * send event to resume game.
       */
     case object AnimationFinished extends Event
   }

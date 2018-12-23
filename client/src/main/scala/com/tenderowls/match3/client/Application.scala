@@ -22,6 +22,7 @@ import korolev.state.EnvConfigurator
 import korolev.state.javaSerialization._
 import levsha.Document
 
+import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
@@ -37,7 +38,7 @@ object Application extends App {
   private implicit val akkaScheduler: actor.Scheduler = actorSystem.scheduler
 
   final val side = 9
-  final val gameTimeout = 3600.seconds
+  final val gameTimeout = 30.seconds
   final val maxScore = 10
 
   implicit val boardRules: Rules = new Rules {
@@ -63,6 +64,8 @@ object Application extends App {
         val id = s"${qsi.deviceId}-${qsi.id}"
         var player: ActorRef[PlayerActor.Event] = null
         var game: ActorRef[GameActor.Event] = null
+        var animated = false
+        val pendingMoveResult = mutable.Queue.empty[PlayerActor.Event.MoveResult]
 
         def stopPlayer(): Unit = if (player != null) {
           actorSystem.stop(player.toUntyped)
@@ -89,33 +92,29 @@ object Application extends App {
             case ClientEvent.EnterLobby(name) =>
               player = {
                 val behavior = PlayerActor.localPlayer(name) {
-                  case PlayerActor.Event.GameStarted(board, gameRef, opponent) =>
+                  case PlayerActor.Event.GameStarted(yourTurn, board, gameRef, opponent) =>
                     game = gameRef
                     opponent.?[String](PlayerActor.Event.WhatsYourName) flatMap { opponentName =>
                       access.maybeTransition {
                         case state: State.LoggedIn =>
                           val you = PlayerInfo(name)
                           val enemy = PlayerInfo(opponentName)
-                          val info = GameInfo(enemy, you, enemy, Score.empty, Score.empty, None)
+                          val currentPlayer = if (yourTurn) you else enemy
+                          val info = GameInfo(currentPlayer, you, enemy, Score.empty, Score.empty, None)
                           val params = BoardComponent.Params(board, Nil, 0)
                           state.copy(state = State.Game(info, params))
                       }
                     }
                   case PlayerActor.Event.YourTurn(time) =>
-                    Future.unit.flatMap { _ =>
-                      access.maybeTransition {
-                        case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
-                          state.copy(state = game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time))))
-                      }
+                    access.maybeTransition {
+                      case state @ State.LoggedIn(_, game @ State.Game(info, _)) =>
+                        state.copy(state = game.copy(info.copy(currentPlayer = info.you, timeRemaining = Some(time))))
                     }
 
                   case PlayerActor.Event.OpponentTurn(time) =>
-                    Future.unit.flatMap { _ =>
-                      println("opponent turn")
-                      access.maybeTransition {
-                        case state@State.LoggedIn(_, game@State.Game(info, _)) =>
-                          state.copy(state = game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time))))
-                      }
+                    access.maybeTransition {
+                      case state@State.LoggedIn(_, game@State.Game(info, _)) =>
+                        state.copy(state = game.copy(info.copy(currentPlayer = info.opponent, timeRemaining = Some(time))))
                     }
 
                   case PlayerActor.Event.EndOfTurn =>
@@ -124,14 +123,19 @@ object Application extends App {
                         state.copy(state = game.copy(info.copy(timeRemaining = None)))
                     }
 
-                  case PlayerActor.Event.MoveResult(batch) =>
-                    access.maybeTransition {
-                      case state @ State.LoggedIn(_, State.Game(info, params)) =>
-                        val updatedParams = params.copy(
-                          animationNumber = params.animationNumber + 1,
-                          batch = batch
-                        )
-                        state.copy(state = State.Game(info, updatedParams))
+                  case mr @ PlayerActor.Event.MoveResult(batch) =>
+                    if (animated) {
+                      pendingMoveResult.enqueue(mr)
+                    } else {
+                      animated = true
+                      access.maybeTransition {
+                        case state @ State.LoggedIn(_, State.Game(info, params)) =>
+                          val updatedParams = params.copy(
+                            animationNumber = params.animationNumber + 1,
+                            batch = batch
+                          )
+                          state.copy(state = State.Game(info, updatedParams))
+                      }
                     }
 
                   case PlayerActor.Event.YouWin =>
@@ -162,6 +166,20 @@ object Application extends App {
               lobby ! LobbyActor.Event.Enter(player)
               Future.unit
             case ClientEvent.SyncAnimation =>
+              if (pendingMoveResult.nonEmpty) {
+                val PlayerActor.Event.MoveResult(batch) = pendingMoveResult.dequeue
+                // TODO remove copy pase
+                access.maybeTransition {
+                  case state @ State.LoggedIn(_, State.Game(info, params)) =>
+                    val updatedParams = params.copy(
+                      animationNumber = params.animationNumber + 1,
+                      batch = batch
+                    )
+                    state.copy(state = State.Game(info, updatedParams))
+                }
+              } else {
+                animated = false
+              }
               game ! GameActor.Event.AnimationFinished
               Future.unit
           }
@@ -235,7 +253,7 @@ object Application extends App {
             'div(
               'display @= "flex",
               'justifyContent @= "space-between",
-              player.toString,
+              player.name,
               if (thisMove) gameInfo.timeRemaining.map(s => 'div(s.toSeconds.toString)) else void
             ),
             renderScore(score)
