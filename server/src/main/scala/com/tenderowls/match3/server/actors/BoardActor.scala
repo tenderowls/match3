@@ -65,7 +65,7 @@ object BoardActor {
     }
 
     Behaviors.receive {
-      case (_, swap) ⇒
+      case (_, swap) =>
         val result = processSwap(board, swap)
         val updatedBoard = board.applyOperations(result.batch.flatten)
         client ! result

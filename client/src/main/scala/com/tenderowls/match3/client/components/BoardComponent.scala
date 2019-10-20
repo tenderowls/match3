@@ -95,16 +95,16 @@ object BoardComponent {
         else cellWidth
       } / vsd * 100
       val xyk = if (wh == 0) cellRadius else 0
-      val x = ((move.fold(screenPos(point.x))(p => screenPos(p.x)) + xyk) / vsd * 100) + "%"
-      val y = ((move.fold(screenPos(point.y))(p => screenPos(p.y)) + xyk) / vsd * 100) + "%"
+      val x = s"${((move.fold(screenPos(point.x))(p => screenPos(p.x)) + xyk) / vsd * 100)}%"
+      val y = s"${((move.fold(screenPos(point.y))(p => screenPos(p.y)) + xyk) / vsd * 100)}%"
 
       optimize {
         div(
           clazz := "circle circle-touchable circle-movable",
           left @= x,
           top @= y,
-          width @= (wh + "%"),
-          height @= (wh + "%"),
+          width @= (s"${wh}%"),
+          height @= (s"${wh}%"),
           backgroundColor @= color.toStringWithAlpha(1.0)
         )
       }
@@ -119,7 +119,7 @@ object BoardComponent {
         div(
           animationState := "animated",
           clazz := "circle circle-movable",
-          left @= (Random.nextInt(49) + 51) + "%",
+          left @= s"${(Random.nextInt(49) + 51)}%",
           top @= "0px",
           width @= "20px",
           height @= "20px",
@@ -149,8 +149,8 @@ object BoardComponent {
           else cellWidth
         } / vsd * 100
         val xyk = if (wh == 0) cellRadius else 0
-        val x = ((screenPos(point.x) + xyk) / vsd * 100) + "%"
-        val y = ((screenPos(point.y) + xyk) / vsd * 100) + "%"
+        val x = s"${((screenPos(point.x) + xyk) / vsd * 100)}%"
+        val y = s"${((screenPos(point.y) + xyk) / vsd * 100)}%"
         val opacity = selectedCellOpt.fold(1d) { selectedCell =>
           if (point == selectedCell) 1d
           else if (neighbours(selectedCell).contains(point)) 1d
@@ -162,8 +162,8 @@ object BoardComponent {
             left @= x,
             top @= y,
             backgroundColor @= cellToColor(cell).toStringWithAlpha(opacity),
-            width @= (wh + "%"),
-            height @= (wh + "%"),
+            width @= (s"${wh}%"),
+            height @= (s"${wh}%"),
             clazz := "circle " + circleClass.getOrElse(""),
             eventHandler.map(f => event("mousedown")(f)),
             eventHandler.map(f => event("touchend")(f))
@@ -178,7 +178,7 @@ object BoardComponent {
           div(
             animationState := "static",
             clazz := "circle circle-movable",
-            left @= Random.nextInt(50) + "%",
+            left @= s"${Random.nextInt(50)}%",
             top @= "0px",
             width @= "20px",
             height @= "20px",
@@ -246,19 +246,19 @@ object BoardComponent {
           } yield ()
         }
       case (_, State.AnimationEnd(an, board, batch)) =>
-//        // End animation
-//        val effect = delay(animationDelay) { access =>
-//          if (batch.isEmpty) {
-//            println("animation end")
-//            for {
-//              _ <- access.transition(_ => State.Static(Some(board), None, an))
-//              _ <- access.publish(Event.AnimationEnd)
-//            } yield ()
-//          } else {
-//            access.transition(_ => State.AnimationStart(an, board, batch))
-//          }
-//        }
-//        renderStaticBoard(board, None, None, Seq(effect))(_ => None)
+        //        // End animation
+        //        val effect = delay(animationDelay) { access =>
+        //          if (batch.isEmpty) {
+        //            println("animation end")
+        //            for {
+        //              _ <- access.transition(_ => State.Static(Some(board), None, an))
+        //              _ <- access.publish(Event.AnimationEnd)
+        //            } yield ()
+        //          } else {
+        //            access.transition(_ => State.AnimationStart(an, board, batch))
+        //          }
+        //        }
+        //        renderStaticBoard(board, None, None, Seq(effect))(_ => None)
         renderStaticBoard(board, None, None, Nil)(
           cellClick = _ => None,
           onAnimationEnd = Some {
@@ -283,12 +283,12 @@ object BoardComponent {
   type Batch = List[List[BoardOperation]]
 
   case class BoardViewConfig(
-      side: Int = 9,
-      cellRadius: Int = 15,
-      cellGap: Int = 4,
-      animationDuration: FiniteDuration = 200.millis,
-      animationDelay: FiniteDuration = 100.millis
-  ) {
+                              side: Int = 9,
+                              cellRadius: Int = 15,
+                              cellGap: Int = 4,
+                              animationDuration: FiniteDuration = 200.millis,
+                              animationDelay: FiniteDuration = 100.millis
+                            ) {
     val cellWidth: Int = cellRadius * 2
     val viewSide: Int = side * (cellWidth + cellGap)
   }

@@ -2,7 +2,7 @@ package com.tenderowls.match3
 
 import scala.annotation.tailrec
 
-class Board(val rules: Rules, val rawData: BoardData) extends Immutable {
+final case class Board(rules: Rules, rawData: BoardData) {
 
   import Cell._
   import BoardOperation._

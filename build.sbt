@@ -1,16 +1,16 @@
 val akkaVersion = "2.5.25"
 val korolevVersion = "0.13.0"
 val commonSettings = Seq(
+  scalacOptions ++= Seq("-Yrangepos", "-deprecation"),
   organization := "com.tenderowls",
   version      := "1.0.0-SNAPSHOT",
-  scalaVersion := "2.12.10"
+  scalaVersion := "2.13.1"
 )
 
 lazy val match3 = project
   .settings(commonSettings:_*)
   .settings(
-    scalacOptions in Test ++= Seq("-Yrangepos"),
-    libraryDependencies += "org.specs2" %% "specs2-core" % "3.9.1" % Test
+    libraryDependencies += "org.specs2" %% "specs2-core" % "4.8.0" % Test
   )
 
 lazy val server = project
