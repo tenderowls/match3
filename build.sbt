@@ -1,9 +1,9 @@
-val akkaVersion = "2.5.19"
-val korolevVersion = "0.9.0"
+val akkaVersion = "2.5.25"
+val korolevVersion = "0.13.0"
 val commonSettings = Seq(
   organization := "com.tenderowls",
   version      := "1.0.0-SNAPSHOT",
-  scalaVersion := "2.12.8"
+  scalaVersion := "2.12.10"
 )
 
 lazy val match3 = project

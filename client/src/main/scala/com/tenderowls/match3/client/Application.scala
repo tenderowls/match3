@@ -14,7 +14,7 @@ import com.tenderowls.match3.client.components.BoardComponent
 import com.tenderowls.match3.client.components.BoardComponent.Rgb
 import com.tenderowls.match3.server.actors.{GameActor, LobbyActor, PlayerActor}
 import com.tenderowls.match3.server.data.{ColorCell, PlayerInfo, Score}
-import korolev.Context
+import korolev.{Context, Router}
 import korolev.execution._
 import korolev.server._
 import korolev.akkahttp._
@@ -186,10 +186,12 @@ object Application extends App {
         )
       }
     },
-    head = Seq(
-      'link('href /= "main.css", 'rel /= "stylesheet", 'type /= "text/css"),
-      'meta('name /="viewport", 'content /= "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no")
-    ),
+    head = { _ =>
+      Seq(
+        'link('href /= "static/main.css", 'rel /= "stylesheet", 'type /= "text/css"),
+        'meta('name /="viewport", 'content /= "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no")
+      )
+    },
     render = {
       case State.Login =>
         'body(
@@ -204,9 +206,9 @@ object Application extends App {
             'form('class /= "panel", 'marginTop @= 15, 'display @= "flex",
               'input(nameInputId, 'type /= "text", 'placeholder /= "Your nickname"),
               'button("Enter lobby"),
-              event('submit) { access =>
+              event("submit") { access =>
                 for {
-                  name <- access.property(nameInputId, 'value)
+                  name <- access.valueOf(nameInputId)
                   _ <- access.transition(_ => State.LoggedIn(name, State.Lobby))
                   _ <- access.publish(ClientEvent.EnterLobby(name))
                 } yield ()
@@ -237,7 +239,7 @@ object Application extends App {
             'div(
               'button(
                 "Play with bot",
-                event('click)(_.publish(ClientEvent.PlayWithBot))
+                event("click")(_.publish(ClientEvent.PlayWithBot))
               )
             )
           )
@@ -288,7 +290,7 @@ object Application extends App {
           )
         )
     },
-    router = emptyRouter
+    router = Router.empty
   )
 
   private val route = akkaHttpService(serviceConfig).apply(AkkaHttpServerConfig())
@@ -298,7 +300,7 @@ object Application extends App {
   private def enterLobbyButton(name: String) = {
     'button(
       "Enter lobby",
-      event('click) { access =>
+      event("click") { access =>
         for {
           _ <- access.publish(ClientEvent.EnterLobby(name))
           _ <- access.maybeTransition {
@@ -334,5 +336,3 @@ object Application extends App {
     )
   }
 }
-
-

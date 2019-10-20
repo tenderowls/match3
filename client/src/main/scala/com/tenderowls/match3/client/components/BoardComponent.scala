@@ -8,11 +8,12 @@ import korolev.Component
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+
 import korolev.execution._
 import korolev.state.javaSerialization._
-import levsha.Document.Attr
-import levsha.XmlNs
-import levsha.events.EventPhase
+
+import levsha.dsl._
+import html._
 
 import scala.util.Random
 
@@ -49,11 +50,12 @@ object BoardComponent {
     case _                    => Rgb(0xFF, 0xFF, 0xFF)
   }
 
+  val animationState = AttrDef("animation-state")
+
   val create: Component[Future, State, Params, Event] = Component[Future, State, Params, Event](State.Static(None, None, 0)) { (context, parameters, state) =>
 
     import BoardViewConfig.default._
     import context.{Event => DomEvent, _}
-    import symbolDsl._
 
     def screenPos(n: Int): Double = {
       n * (cellWidth + cellGap)
@@ -72,52 +74,61 @@ object BoardComponent {
       )
     }
 
-    def renderAnimatedBoard(board: Board, ops: List[BoardOperation])(onAnimationEnd: Access => Future[Unit]) = {
-      def calculateMove(point: Point) = ops.collectFirst {
-        case Transition(`point`, to) => to
-        case Swap(`point`, to)       => to
-        case Swap(to, `point`)       => to
+    def calculateMove(ops: List[BoardOperation], point: Point) = ops.collectFirst {
+      case Transition(`point`, to) => to
+      case Swap(`point`, to)       => to
+      case Swap(to, `point`)       => to
+    }
+
+    def renderAnimatedCell(ops: List[BoardOperation], point: Point, cell: Cell) = {
+      val move = calculateMove(ops, point)
+      val isEmptyCell = cell == Cell.EmptyCell
+      val updateToNonEmpty = ops.collectFirst {
+        case Update(p, c) if p == point && c != EmptyCell => c
       }
-      'div(
-        'class /= "board",
+      val color = cellToColor(updateToNonEmpty.getOrElse(cell))
+      val vsd = viewSide.toDouble
+      val wh = {
+        if (ops.contains(Update(point, Cell.EmptyCell))) 0
+        else if (updateToNonEmpty.nonEmpty) cellWidth
+        else if (isEmptyCell) 0
+        else cellWidth
+      } / vsd * 100
+      val xyk = if (wh == 0) cellRadius else 0
+      val x = ((move.fold(screenPos(point.x))(p => screenPos(p.x)) + xyk) / vsd * 100) + "%"
+      val y = ((move.fold(screenPos(point.y))(p => screenPos(p.y)) + xyk) / vsd * 100) + "%"
+
+      optimize {
+        div(
+          clazz := "circle circle-touchable circle-movable",
+          left @= x,
+          top @= y,
+          width @= (wh + "%"),
+          height @= (wh + "%"),
+          backgroundColor @= color.toStringWithAlpha(1.0)
+        )
+      }
+    }
+
+    def renderAnimatedBoard(board: Board,
+                            ops: List[BoardOperation])
+                           (onAnimationEnd: Access => Future[Unit]) = optimize {
+      div(
+        clazz := "board",
         // Fake circle need to track transition end
-        'div(
-          'state /= "animated",
-          'class /= "circle circle-movable",
-          'left @= (Random.nextInt(49) + 51) + "%",
-          'top @= 0,
-          'width @= 20,
-          'height @= 20,
-          'backgroundColor @= "#FFFFFF",
-          event('transitionend)(onAnimationEnd)
+        div(
+          animationState := "animated",
+          clazz := "circle circle-movable",
+          left @= (Random.nextInt(49) + 51) + "%",
+          top @= "0px",
+          width @= "20px",
+          height @= "20px",
+          backgroundColor @= "#FFFFFF",
+          event("transitionend")(onAnimationEnd)
         ),
         board.data.map {
           case (point, cell) =>
-            val move = calculateMove(point)
-            val isEmptyCell = cell == Cell.EmptyCell
-            val updateToNonEmpty = ops.collectFirst {
-              case Update(p, c) if p == point && c != EmptyCell => c
-            }
-            val color = cellToColor(updateToNonEmpty.getOrElse(cell))
-            val vsd = viewSide.toDouble
-            val wh = {
-              if (ops.contains(Update(point, Cell.EmptyCell))) 0
-              else if (updateToNonEmpty.nonEmpty) cellWidth
-              else if (isEmptyCell) 0
-              else cellWidth
-            } / vsd * 100
-            val xyk = if (wh == 0) cellRadius else 0
-            val x = ((move.fold(screenPos(point.x))(p => screenPos(p.x)) + xyk) / vsd * 100) + "%"
-            val y = ((move.fold(screenPos(point.y))(p => screenPos(p.y)) + xyk) / vsd * 100) + "%"
-            'div(
-              'left @= x,
-              'top @= y,
-              'width @= (wh + "%"),
-              'height @= (wh + "%"),
-              'backgroundColor @= color.toString,
-              'class /= "circle circle-touchable circle-movable",
-              'fillOpacity /= "1"
-            )
+            renderAnimatedCell(ops, point, cell)
         }
       )
     }
@@ -128,50 +139,59 @@ object BoardComponent {
                           effects: Seq[Effect] = Nil)
                          (cellClick: Point => Option[Access => Future[Unit]],
                           onAnimationEnd: Option[Access => Future[Unit]] = None) = {
-      'div(
-        'class /= "board",
-        // Fake circle need to track transition end
-        'div(
-          'state /= "static",
-          'class /= "circle circle-movable",
-          'left @= Random.nextInt(50) + "%",
-          'top @= 0,
-          'width @= 20,
-          'height @= 20,
-          'backgroundColor @= "#FFFFFF",
-          onAnimationEnd.map(event('transitionend)(_))
-        ),
-        board.data.map {
-          case (point, cell) =>
-            val eventHandler = cellClick(point)
-            val vsd = viewSide.toDouble
-            val wh = {
-              if (cell == Cell.EmptyCell) 0
-              else if (selectedCellOpt.contains(point)) cellWidth + cellGap
-              else cellWidth
-            } / vsd * 100
-            val xyk = if (wh == 0) cellRadius else 0
-            val x = ((screenPos(point.x) + xyk) / vsd * 100) + "%"
-            val y = ((screenPos(point.y) + xyk) / vsd * 100) + "%"
-            val opacity = selectedCellOpt.fold(1d) { selectedCell =>
-              if (point == selectedCell) 1d
-              else if (neighbours(selectedCell).contains(point)) 1d
-              else 0.09d
-            }
-            'div(
-              'left @= x,
-              'top @= y,
-              'backgroundColor @= cellToColor(cell).toString,
-              'width @= (wh + "%"),
-              'height @= (wh + "%"),
-              'class /= "circle " + circleClass.getOrElse(""),
-              'fillOpacity /= opacity.toString,
-              eventHandler.map(f => event('mousedown)(f)),
-              eventHandler.map(f => event('touchend)(f))
-            )
-        },
-        effects
-      )
+
+      def renderStaticCell(point: Point, cell: Cell) = {
+        val eventHandler = cellClick(point)
+        val vsd = viewSide.toDouble
+        val wh = {
+          if (cell == Cell.EmptyCell) 0
+          else if (selectedCellOpt.contains(point)) cellWidth + cellGap
+          else cellWidth
+        } / vsd * 100
+        val xyk = if (wh == 0) cellRadius else 0
+        val x = ((screenPos(point.x) + xyk) / vsd * 100) + "%"
+        val y = ((screenPos(point.y) + xyk) / vsd * 100) + "%"
+        val opacity = selectedCellOpt.fold(1d) { selectedCell =>
+          if (point == selectedCell) 1d
+          else if (neighbours(selectedCell).contains(point)) 1d
+          else 0.5d
+        }
+
+        optimize {
+          div(
+            left @= x,
+            top @= y,
+            backgroundColor @= cellToColor(cell).toStringWithAlpha(opacity),
+            width @= (wh + "%"),
+            height @= (wh + "%"),
+            clazz := "circle " + circleClass.getOrElse(""),
+            eventHandler.map(f => event("mousedown")(f)),
+            eventHandler.map(f => event("touchend")(f))
+          )
+        }
+      }
+
+      optimize {
+        div(
+          clazz := "board",
+          // Fake circle need to track transition end
+          div(
+            animationState := "static",
+            clazz := "circle circle-movable",
+            left @= Random.nextInt(50) + "%",
+            top @= "0px",
+            width @= "20px",
+            height @= "20px",
+            backgroundColor @= "#FFFFFF",
+            onAnimationEnd.map(event("transitionend")(_))
+          ),
+          board.data.map {
+            case (point, cell) =>
+              renderStaticCell(point, cell)
+          },
+          effects
+        )
+      }
     }
 
     (parameters, state) match {
