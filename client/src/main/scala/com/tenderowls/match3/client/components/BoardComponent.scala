@@ -40,14 +40,24 @@ object BoardComponent {
     override def toString: String = s"rgb($red, $green, $blue)"
   }
 
+  object Rgb {
+    val Blue = Rgb(0x00, 0xA3, 0xFF)
+    val Green = Rgb(0x0C, 0xE8, 0x42)
+    val Red  = Rgb(0xFF, 0x0D, 0x2A)
+    val Yellow = Rgb(0xFF, 0xF7, 0x00)
+    val Orange = Rgb(0xE8, 0x86, 0x0C)
+    val Dark = Rgb(0x33, 0x33, 0x33)
+    val White = Rgb(0xFF, 0xFF, 0xFF)
+  }
+
   def cellToColor(c: Cell): Rgb = c match {
-    case ColorCell.BlueCell   => Rgb(0x00, 0xA3, 0xFF)
-    case ColorCell.GreenCell  => Rgb(0x0C, 0xE8, 0x42)
-    case ColorCell.RedCell    => Rgb(0xFF, 0x0D, 0x2A)
-    case ColorCell.YellowCell => Rgb(0xFF, 0xF7, 0x00)
-    case ColorCell.Orange     => Rgb(0xE8, 0x86, 0x0C)
-    case ColorCell.Dark       => Rgb(0x33, 0x33, 0x33)
-    case _                    => Rgb(0xFF, 0xFF, 0xFF)
+    case ColorCell.BlueCell   => Rgb.Blue
+    case ColorCell.GreenCell  => Rgb.Green
+    case ColorCell.RedCell    => Rgb.Red
+    case ColorCell.YellowCell => Rgb.Yellow
+    case ColorCell.Orange     => Rgb.Orange
+    case ColorCell.Dark       => Rgb.Dark
+    case _                    => Rgb.White
   }
 
   val animationState = AttrDef("animation-state")
