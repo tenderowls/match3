@@ -111,9 +111,11 @@ object PlayerActor {
               case _: Event.GameStarted =>
                 Behaviors.same
               case Event.YouWin =>
-                Behaviors.same
+                Behaviors.stopped
               case Event.YouLose =>
-                Behaviors.same
+                Behaviors.stopped
+              case Event.Draw =>
+                Behaviors.stopped
               case _: Event.CurrentScore =>
                 Behaviors.same
             }
@@ -143,6 +145,7 @@ object PlayerActor {
 
     case object YouWin extends Event
     case object YouLose extends Event
+    case object Draw extends Event
     case object EndOfTurn extends Event
   }
 }

@@ -57,15 +57,24 @@ object GameActor {
           Behaviors.stopped
       }
 
-      def turn(currentPlayer: Player, leftPlayerScore: Score, rightPlayerScore: Score): Behavior[Event] = {
+      def turn(turnNumber: Int, currentPlayer: Player, leftPlayerScore: Score, rightPlayerScore: Score): Behavior[Event] = {
         Behaviors.setup[Event] { ctx =>
 
-          if (leftPlayerScore.exists(_ >= maxScore)) {
+          val endOfTurn = turnNumber % 2 == 0
+          val leftPlayerWins = leftPlayerScore.exists(_ >= maxScore)
+          val rightPlayerWins = rightPlayerScore.exists(_ >= maxScore)
+
+          if (endOfTurn && leftPlayerWins && rightPlayerWins) {
+            leftPlayer ! PlayerActor.Event.Draw
+            rightPlayer ! PlayerActor.Event.Draw
+            Behaviors.stopped
+          }
+          else if (endOfTurn && leftPlayerWins) {
             leftPlayer ! PlayerActor.Event.YouWin
             rightPlayer ! PlayerActor.Event.YouLose
             Behaviors.stopped
           }
-          else if (rightPlayerScore.exists(_ >= maxScore)) {
+          else if (endOfTurn && rightPlayerWins) {
             leftPlayer ! PlayerActor.Event.YouLose
             rightPlayer ! PlayerActor.Event.YouWin
             Behaviors.stopped
@@ -86,8 +95,8 @@ object GameActor {
                 leftPlayer  ! PlayerActor.Event.EndOfTurn
                 rightPlayer ! PlayerActor.Event.EndOfTurn
                 currentPlayer match {
-                  case `leftPlayer` => turn(rightPlayer, leftPlayerScore, rightPlayerScore)
-                  case `rightPlayer` => turn(leftPlayer, leftPlayerScore, rightPlayerScore)
+                  case `leftPlayer` => turn(turnNumber + 1, rightPlayer, leftPlayerScore, rightPlayerScore)
+                  case `rightPlayer` => turn(turnNumber + 1, leftPlayer, leftPlayerScore, rightPlayerScore)
                 }
               case (_, Event.MoveResult(batch, score)) =>
                 val event = PlayerActor.Event.MoveResult(batch)
@@ -101,12 +110,12 @@ object GameActor {
                     val newLeftPlayerScore = leftPlayerScore + score
                     leftPlayer  ! PlayerActor.Event.CurrentScore(newLeftPlayerScore, rightPlayerScore)
                     rightPlayer ! PlayerActor.Event.CurrentScore(rightPlayerScore, newLeftPlayerScore)
-                    awaitAnimation(turn(rightPlayer, newLeftPlayerScore, rightPlayerScore))
+                    awaitAnimation(turn(turnNumber + 1, rightPlayer, newLeftPlayerScore, rightPlayerScore))
                   case `rightPlayer` =>
                     val newRightPlayerScore = rightPlayerScore + score
                     leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, newRightPlayerScore)
                     rightPlayer ! PlayerActor.Event.CurrentScore(newRightPlayerScore, leftPlayerScore)
-                    awaitAnimation(turn(leftPlayer, leftPlayerScore, newRightPlayerScore))
+                    awaitAnimation(turn(turnNumber + 1, leftPlayer, leftPlayerScore, newRightPlayerScore))
                 }
 
               case (_, Event.MakeMove(client, op)) =>
@@ -130,7 +139,7 @@ object GameActor {
       }
 
       // Give turn to left player
-      turn(leftPlayer, Score.empty, Score.empty)
+      turn(0, leftPlayer, Score.empty, Score.empty)
     }
   }
 

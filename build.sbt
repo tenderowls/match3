@@ -1,5 +1,5 @@
-val akkaVersion = "2.5.25"
-val korolevVersion = "0.13.0"
+val akkaVersion = "2.5.26"
+val korolevVersion = "0.14.0"
 val commonSettings = Seq(
   scalacOptions ++= Seq("-Yrangepos", "-deprecation"),
   organization := "com.tenderowls",

@@ -9,7 +9,7 @@ import scala.util.Random
 
 object LobbyActor {
 
-  def mkId: String = Random.alphanumeric.take(6).mkString
+  def generateId: String = Random.alphanumeric.take(6).mkString
 
   def apply(timeout: FiniteDuration, rules: Rules, maxScore: Int): Behavior[Event] = {
     def matchMaking(pendingPlayers: List[Player]): Behavior[Event] = {
@@ -22,7 +22,7 @@ object LobbyActor {
             case pendingPlayer :: restPendingPlayers =>
               val board = BoardGenerator.square()(rules)
               val gameBehavior = GameActor(pendingPlayer, player, board, timeout, rules, maxScore)
-              ctx.spawn(gameBehavior, s"game-$mkId")
+              ctx.spawn(gameBehavior, s"game-$generateId")
               matchMaking(restPendingPlayers)
           }
         case (_, Event.Leave(player)) =>

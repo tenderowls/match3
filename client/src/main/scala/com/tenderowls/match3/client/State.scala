@@ -21,6 +21,7 @@ object State {
   case class Game(info: GameInfo, boardParams: Params) extends LoggedInState
   case object YouWin extends LoggedInState
   case object YouLose extends LoggedInState
+  case object Draw extends LoggedInState
 
   case class GameInfo(
     currentPlayer: PlayerInfo,

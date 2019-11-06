@@ -3,15 +3,13 @@ package com.tenderowls.match3.client.components
 import com.tenderowls.match3.server.data.{ColorCell, Score}
 import com.tenderowls.match3.BoardOperation.{Swap, Transition, Update}
 import com.tenderowls.match3.Cell.EmptyCell
-import com.tenderowls.match3.{Board, BoardOperation, Cell, Point}
+import com.tenderowls.match3.{Board, BoardOperation, Cell, Direction, Point}
 import korolev.Component
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-
 import korolev.execution._
 import korolev.state.javaSerialization._
-
 import levsha.dsl._
 import html._
 
@@ -48,6 +46,15 @@ object BoardComponent {
     val Orange = Rgb(0xE8, 0x86, 0x0C)
     val Dark = Rgb(0x33, 0x33, 0x33)
     val White = Rgb(0xFF, 0xFF, 0xFF)
+  }
+
+  sealed trait Swipe
+
+  object Swipe {
+    case object Up extends Swipe
+    case object Down extends Swipe
+    case object Left extends Swipe
+    case object Right extends Swipe
   }
 
   def cellToColor(c: Cell): Rgb = c match {
@@ -146,12 +153,17 @@ object BoardComponent {
     def renderStaticBoard(board: Board,
                           selectedCellOpt: Option[Point],
                           circleClass: Option[String],
-                          effects: Seq[Effect] = Nil)
+                          bindings: Seq[Binding] = Nil)
                          (cellClick: Point => Option[Access => Future[Unit]],
-                          onAnimationEnd: Option[Access => Future[Unit]] = None) = {
+                          cellSwipe: (Point, Swipe) => Option[Access => Future[Unit]],
+                          onAnimationEnd: Option[Access => Future[Unit]]) = {
 
       def renderStaticCell(point: Point, cell: Cell) = {
-        val eventHandler = cellClick(point)
+        val clickHandler = cellClick(point)
+        val swipeUpHandler = cellSwipe(point, Swipe.Up)
+        val swipeDownHandler = cellSwipe(point, Swipe.Down)
+        val swipeLeftHandler = cellSwipe(point, Swipe.Left)
+        val swipeRightHandler = cellSwipe(point, Swipe.Right)
         val vsd = viewSide.toDouble
         val wh = {
           if (cell == Cell.EmptyCell) 0
@@ -175,8 +187,11 @@ object BoardComponent {
             width @= (s"${wh}%"),
             height @= (s"${wh}%"),
             clazz := "circle " + circleClass.getOrElse(""),
-            eventHandler.map(f => event("mousedown")(f)),
-            eventHandler.map(f => event("touchend")(f))
+            clickHandler.map(f => event("mouseup")(f)),
+            swipeUpHandler.map(f => event("swipeup")(f)),
+            swipeDownHandler.map(f => event("swipedown")(f)),
+            swipeLeftHandler.map(f => event("swipeleft")(f)),
+            swipeRightHandler.map(f => event("swiperight")(f))
           )
         }
       }
@@ -199,7 +214,7 @@ object BoardComponent {
             case (point, cell) =>
               renderStaticCell(point, cell)
           },
-          effects
+          bindings
         )
       }
     }
@@ -207,9 +222,9 @@ object BoardComponent {
     (parameters, state) match {
       case (Params(origBoard, _, an), State.Static(boardOpt, selectedCellOpt, lan)) if an <= lan =>
         val board = boardOpt.getOrElse(origBoard)
-        renderStaticBoard(board, selectedCellOpt, Some("circle-touchable")) { p2 =>
-          Some {
-            { access =>
+        renderStaticBoard(board, selectedCellOpt, Some("circle-touchable"))(
+          cellClick = p2 => Some(
+            access => {
               val swapOpt = selectedCellOpt.flatMap { p1 =>
                 if (neighbours(p1).contains(p2)) Some(Swap(p1, p2))
                 else None
@@ -224,8 +239,22 @@ object BoardComponent {
                 }
               }
             }
-          }
-        }
+          ),
+          cellSwipe = (p1, swipe) => Some(
+            access => {
+              val p2 = swipe match {
+                case Swipe.Up => p1.top
+                case Swipe.Down => p1.bottom
+                case Swipe.Left => p1.left
+                case Swipe.Right => p1.right
+              }
+              val swap = Swap(p1, p2)
+              val move = Event.Move(swap)
+              access.publish(move)
+            }
+          ),
+          onAnimationEnd = None
+        )
       case (Params(origBoard, ops :: batch, an), State.Static(boardOpt, _, lan)) if an > lan =>
         val board = boardOpt.getOrElse(origBoard)
         // Enter animation
@@ -271,6 +300,7 @@ object BoardComponent {
         //        renderStaticBoard(board, None, None, Seq(effect))(_ => None)
         renderStaticBoard(board, None, None, Nil)(
           cellClick = _ => None,
+          cellSwipe = (_, _) => None,
           onAnimationEnd = Some {
             access: Access => {
               if (batch.isEmpty) {
