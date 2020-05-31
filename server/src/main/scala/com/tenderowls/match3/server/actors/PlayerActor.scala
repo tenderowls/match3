@@ -1,10 +1,10 @@
 package com.tenderowls.match3.server.actors
 
-import akka.actor.typed.{ActorRef, Behavior, Terminated}
+import akka.actor.typed.{ ActorRef, Behavior, Terminated }
 import akka.actor.typed.scaladsl.Behaviors
-import com.tenderowls.match3.BoardOperation.{Swap, Update}
+import com.tenderowls.match3.BoardOperation.{ Swap, Update }
 import com.tenderowls.match3.server.data.Score
-import com.tenderowls.match3.{Board, BoardAdviser}
+import com.tenderowls.match3.{ Board, BoardAdviser }
 
 import scala.concurrent.duration._
 
@@ -27,12 +27,7 @@ object PlayerActor {
       }
       aux(0, board.applyOperations(List(swap))) -> swap
     }
-    board.advices
-      .toList
-      .map(applySwap)
-      .sortBy(-_._1)
-      .headOption
-      .map(_._2)
+    board.advices.toList.map(applySwap).sortBy(-_._1).headOption.map(_._2)
   }
 
   def localPlayer[U](name: String)(onEvent: PartialFunction[Event, U]): Behavior[Event] = {

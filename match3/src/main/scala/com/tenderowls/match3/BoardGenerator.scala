@@ -14,22 +14,20 @@ object BoardGenerator {
 
     def board(args: Any*)(implicit rndVal: () => Cell): Board = {
       val s = sc.parts.mkString
-      val rows = s.split("\n")
-        .map(row => row.trim)
-        .filter(_.length > 0)
+      val rows = s.split("\n").map(row => row.trim).filter(_.length > 0)
       val cells =
         rows.indices map { y =>
           val values = rows(y).split(" ")
           0 until values.length filter { x =>
             values(x) match {
               case "" => false
-              case _ => true
+              case _  => true
             }
           } map { x =>
             values(x) match {
-              case "_" => BadCell
-              case "*" => EmptyCell
-              case "?" => rndVal()
+              case "_"                 => BadCell
+              case "*"                 => EmptyCell
+              case "?"                 => rndVal()
               case ValuePattern(value) => IntCell(value.toInt)
               case s: String =>
                 val code = s.charAt(0).toByte
@@ -47,7 +45,7 @@ object BoardGenerator {
     }
   }
 
-  def square(makeStable:Boolean = true)(implicit rules: Rules): Board = {
+  def square(makeStable: Boolean = true)(implicit rules: Rules): Board = {
     val raw =
       0 until rules.height map { _ =>
         0 until rules.width map { _ =>

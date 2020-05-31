@@ -23,11 +23,7 @@ object GeneratorSpec extends Specification {
     However there is no more important cases
   """
 
-  def simpleBoard = board"0 0 1".rawData mustEqual Vector(
-    IntCell(0),
-    IntCell(0),
-    IntCell(1)
-  )
+  def simpleBoard = board"0 0 1".rawData mustEqual Vector(IntCell(0), IntCell(0), IntCell(1))
 
   def board2d = {
     val board = board"""
@@ -36,10 +32,15 @@ object GeneratorSpec extends Specification {
       0 0 _
       """
     board.rawData mustEqual Vector(
-      IntCell(0), IntCell(0), IntCell(1),
-      EmptyCell, EmptyCell, IntCell(0),
-      IntCell(0), IntCell(0), BadCell
-    )
+      IntCell(0),
+      IntCell(0),
+      IntCell(1),
+      EmptyCell,
+      EmptyCell,
+      IntCell(0),
+      IntCell(0),
+      IntCell(0),
+      BadCell)
   }
 
 }

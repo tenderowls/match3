@@ -1,10 +1,10 @@
-val akkaVersion = "2.5.26"
-val korolevVersion = "0.14.0"
+val akkaVersion = "2.6.5"
+val korolevVersion = "0.15.1"
 val commonSettings = Seq(
   scalacOptions ++= Seq("-Yrangepos", "-deprecation"),
   organization := "com.tenderowls",
   version      := "1.0.0-SNAPSHOT",
-  scalaVersion := "2.13.1"
+  scalaVersion := "2.13.2"
 )
 
 lazy val match3 = project
@@ -37,7 +37,7 @@ lazy val client = project
     dockerUpdateLatest := true,
     normalizedName := "match3-client",
     libraryDependencies ++= Seq(
-      "com.github.fomkin" %% "korolev-server-akkahttp" % korolevVersion,
+      "com.github.fomkin" %% "korolev-akka" % korolevVersion,
       "org.slf4j" % "slf4j-simple" % "1.7.+"
     )
   )
