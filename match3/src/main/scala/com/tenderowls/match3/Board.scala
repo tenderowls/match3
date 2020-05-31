@@ -14,7 +14,7 @@ final case class Board(rules: Rules, rawData: BoardData) {
       Point(i % rules.width, i / rules.width) -> rawData(i)
     }
   }
-  
+
   def mapData[T](f: (Point, Int) => T): Iterable[T] = {
     val range = rawData.indices
     range.view map { i =>
@@ -23,9 +23,7 @@ final case class Board(rules: Rules, rawData: BoardData) {
   }
 
   @tailrec
-  final private def genSeq(lst: List[MatchedCell],
-    nx: Inc = x => x,
-    ny: Inc = y => y): List[MatchedCell] = {
+  final private def genSeq(lst: List[MatchedCell], nx: Inc = x => x, ny: Inc = y => y): List[MatchedCell] = {
     val prev = lst.head
     val x = nx(prev.pos.x)
     val y = ny(prev.pos.y)
@@ -51,12 +49,10 @@ final case class Board(rules: Rules, rawData: BoardData) {
   }
 
   def fillEmptyCells: Board = {
-    buildWithData(
-      rawData map {
+    buildWithData(rawData map {
         case EmptyCell => rules.randomValue
         case x         => x
-      }
-    )
+      })
   }
 
   @tailrec
@@ -64,9 +60,8 @@ final case class Board(rules: Rules, rawData: BoardData) {
     matchedSequences().toList match {
       case Nil => this
       case sequences =>
-        val replace = sequences.map(sequence => sequence.head).groupBy {
-          cell =>
-            (cell.pos.x, cell.pos.y)
+        val replace = sequences.map(sequence => sequence.head).groupBy { cell =>
+          (cell.pos.x, cell.pos.y)
         }
         val newBoard = mapData {
           case (Point(x, y), i) =>
@@ -96,10 +91,7 @@ final case class Board(rules: Rules, rawData: BoardData) {
       genSeq(mr, ny = y => y + 1)
     }
     val sequences = rs ++ bs
-    sequences
-      .toSeq
-      .filter(_.size >= minLength)
-      .sortBy(-_.size)
+    sequences.toSeq.filter(_.size >= minLength).sortBy(-_.size)
   }
 
   /**
@@ -109,49 +101,43 @@ final case class Board(rules: Rules, rawData: BoardData) {
   def matchedSequence: Option[List[MatchedCell]] =
     matchedSequences().headOption
 
-  def calculateRemoveSequenceOperations(
-    seq: List[MatchedCell]): List[BoardOperation] = {
+  def calculateRemoveSequenceOperations(seq: List[MatchedCell]): List[BoardOperation] = {
     // Create board without cells present in sequence
-    val cleanBoard = buildWithData(
-      mapData { (point, i) =>
-        val exists = seq.exists {
-          case MatchedCell(`point`, _) => true
-          case _                       => false
-        }
-        if (exists) EmptyCell
-        else rawData(i)
-      }.toVector
-    )
+    val cleanBoard = buildWithData(mapData { (point, i) =>
+      val exists = seq.exists {
+        case MatchedCell(`point`, _) => true
+        case _                       => false
+      }
+      if (exists) EmptyCell
+      else rawData(i)
+    }.toVector)
     // Calculate cell transition operations
     val transitionOps = seq filter {
-      // First of all, let's keep only those cells which
-      // don't have empty neighbour to bottom
-      case MatchedCell(Point(x, y), _) =>
-        cleanBoard.get(x, y + 1) match {
-          case Some(EmptyCell) => false
-          case _               => true
+          // First of all, let's keep only those cells which
+          // don't have empty neighbour to bottom
+          case MatchedCell(Point(x, y), _) =>
+            cleanBoard.get(x, y + 1) match {
+              case Some(EmptyCell) => false
+              case _               => true
+            }
+        } map {
+          case MatchedCell(Point(x, y), _) =>
+            // Find top boundary for cell from sequence. It can be
+            // top boundary of board or BadCell
+            val boundary = (-1 to y).reverse find { yy =>
+              yy == -1 || cleanBoard.getUnsafe(x, yy) == BadCell
+            }
+            // Find y coordinates of cells upwards from cell
+            val topYs = ((boundary.get + 1) to y).reverse.filter { yy =>
+              cleanBoard.getUnsafe(x, yy) match {
+                case EmptyCell => false
+                case _         => true
+              }
+            }
+            topYs.indices map { i =>
+              Transition(Point(x, topYs(i)), Point(x, y - i))
+            }
         }
-    } map {
-                          case MatchedCell(Point(x, y), _) =>
-                            // Find top boundary for cell from sequence. It can be
-                            // top boundary of board or BadCell
-                            val boundary = (-1 to y).reverse find { yy =>
-                              yy == -1 || cleanBoard.getUnsafe(x, yy) == BadCell
-                            }
-                            // Find y coordinates of cells upwards from cell
-                            val topYs = ((boundary.get + 1) to y).reverse.filter { yy =>
-                              cleanBoard.getUnsafe(x, yy) match {
-                                case EmptyCell => false
-                                case _         => true
-                              }
-                            }
-                            topYs.indices map { i =>
-                              Transition(
-                                Point(x, topYs(i)),
-                                Point(x, y - i)
-                              )
-                            }
-                        }
     val updateOps = seq map { matched =>
       Update(matched.pos, EmptyCell)
     }

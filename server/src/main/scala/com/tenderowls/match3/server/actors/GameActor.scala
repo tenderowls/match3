@@ -1,6 +1,6 @@
 package com.tenderowls.match3.server.actors
 
-import akka.actor.typed.{Behavior, Terminated}
+import akka.actor.typed.{ Behavior, Terminated }
 import akka.actor.typed.scaladsl.Behaviors
 import com.tenderowls.match3.server.data.Score
 import com.tenderowls.match3._
@@ -9,31 +9,29 @@ import scala.concurrent.duration._
 
 object GameActor {
 
-  def apply(leftPlayer: Player,
-            rightPlayer: Player,
-            initialBoard: Board,
-            timeout: FiniteDuration,
-            match3Rules: Rules,
-            maxScore: Int): Behavior[Event] = {
+  def apply(
+      leftPlayer: Player,
+      rightPlayer: Player,
+      initialBoard: Board,
+      timeout: FiniteDuration,
+      match3Rules: Rules,
+      maxScore: Int): Behavior[Event] = {
 
     Behaviors.setup[Event] { ctx =>
-
       ctx.watch(leftPlayer)
       ctx.watch(rightPlayer)
 
       leftPlayer ! PlayerActor.Event.GameStarted(
         yourTurn = true,
         board = initialBoard,
-        game = ctx.self,//ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(leftPlayer, op)),
-        opponent = rightPlayer
-      )
+        game = ctx.self, //ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(leftPlayer, op)),
+        opponent = rightPlayer)
 
       rightPlayer ! PlayerActor.Event.GameStarted(
         yourTurn = false,
         board = initialBoard,
-        game = ctx.self,//ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(rightPlayer, op)),
-        opponent = leftPlayer
-      )
+        game = ctx.self, //ctx.spawnAdapter((op: BoardOperation.Swap) => Event.MakeMove(rightPlayer, op)),
+        opponent = leftPlayer)
 
       val boardActor = {
         val proxy = ctx.messageAdapter { result: BoardActor.Result =>
@@ -45,21 +43,24 @@ object GameActor {
       def awaitAnimation(turn: Behavior[Event], counter: Int = 1): Behavior[Event] = {
         Behaviors.receive[Event] {
           case (_, Event.AnimationFinished) if counter == 2 => turn
-          case (_, Event.AnimationFinished) => awaitAnimation(turn, counter + 1)
-          case _ => Behaviors.same
+          case (_, Event.AnimationFinished)                 => awaitAnimation(turn, counter + 1)
+          case _                                            => Behaviors.same
         }
       } receiveSignal {
-        case (_, Terminated(`leftPlayer`)) =>
-          rightPlayer ! PlayerActor.Event.YouWin
-          Behaviors.stopped
-        case (_, Terminated(`rightPlayer`)) =>
-          leftPlayer ! PlayerActor.Event.YouWin
-          Behaviors.stopped
-      }
+          case (_, Terminated(`leftPlayer`)) =>
+            rightPlayer ! PlayerActor.Event.YouWin
+            Behaviors.stopped
+          case (_, Terminated(`rightPlayer`)) =>
+            leftPlayer ! PlayerActor.Event.YouWin
+            Behaviors.stopped
+        }
 
-      def turn(turnNumber: Int, currentPlayer: Player, leftPlayerScore: Score, rightPlayerScore: Score): Behavior[Event] = {
+      def turn(
+          turnNumber: Int,
+          currentPlayer: Player,
+          leftPlayerScore: Score,
+          rightPlayerScore: Score): Behavior[Event] = {
         Behaviors.setup[Event] { ctx =>
-
           val endOfTurn = turnNumber % 2 == 0
           val leftPlayerWins = leftPlayerScore.exists(_ >= maxScore)
           val rightPlayerWins = rightPlayerScore.exists(_ >= maxScore)
@@ -68,18 +69,15 @@ object GameActor {
             leftPlayer ! PlayerActor.Event.Draw
             rightPlayer ! PlayerActor.Event.Draw
             Behaviors.stopped
-          }
-          else if (endOfTurn && leftPlayerWins) {
+          } else if (endOfTurn && leftPlayerWins) {
             leftPlayer ! PlayerActor.Event.YouWin
             rightPlayer ! PlayerActor.Event.YouLose
             Behaviors.stopped
-          }
-          else if (endOfTurn && rightPlayerWins) {
+          } else if (endOfTurn && rightPlayerWins) {
             leftPlayer ! PlayerActor.Event.YouLose
             rightPlayer ! PlayerActor.Event.YouWin
             Behaviors.stopped
-          }
-          else {
+          } else {
             if (currentPlayer == leftPlayer) {
               leftPlayer ! PlayerActor.Event.YourTurn(timeout)
               rightPlayer ! PlayerActor.Event.OpponentTurn(timeout)
@@ -92,10 +90,10 @@ object GameActor {
 
             Behaviors.receive[Event] {
               case (_, Event.TimeIsOut) =>
-                leftPlayer  ! PlayerActor.Event.EndOfTurn
+                leftPlayer ! PlayerActor.Event.EndOfTurn
                 rightPlayer ! PlayerActor.Event.EndOfTurn
                 currentPlayer match {
-                  case `leftPlayer` => turn(turnNumber + 1, rightPlayer, leftPlayerScore, rightPlayerScore)
+                  case `leftPlayer`  => turn(turnNumber + 1, rightPlayer, leftPlayerScore, rightPlayerScore)
                   case `rightPlayer` => turn(turnNumber + 1, leftPlayer, leftPlayerScore, rightPlayerScore)
                 }
               case (_, Event.MoveResult(batch, score)) =>
@@ -108,12 +106,12 @@ object GameActor {
                 currentPlayer match {
                   case `leftPlayer` =>
                     val newLeftPlayerScore = leftPlayerScore + score
-                    leftPlayer  ! PlayerActor.Event.CurrentScore(newLeftPlayerScore, rightPlayerScore)
+                    leftPlayer ! PlayerActor.Event.CurrentScore(newLeftPlayerScore, rightPlayerScore)
                     rightPlayer ! PlayerActor.Event.CurrentScore(rightPlayerScore, newLeftPlayerScore)
                     awaitAnimation(turn(turnNumber + 1, rightPlayer, newLeftPlayerScore, rightPlayerScore))
                   case `rightPlayer` =>
                     val newRightPlayerScore = rightPlayerScore + score
-                    leftPlayer  ! PlayerActor.Event.CurrentScore(leftPlayerScore, newRightPlayerScore)
+                    leftPlayer ! PlayerActor.Event.CurrentScore(leftPlayerScore, newRightPlayerScore)
                     rightPlayer ! PlayerActor.Event.CurrentScore(newRightPlayerScore, leftPlayerScore)
                     awaitAnimation(turn(turnNumber + 1, leftPlayer, leftPlayerScore, newRightPlayerScore))
                 }

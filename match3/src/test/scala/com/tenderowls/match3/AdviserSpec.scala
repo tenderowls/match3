@@ -9,8 +9,8 @@ import org.specs2._
 import scala.util.Random
 
 /**
- * @author Aleksey Fomkin <aleksey.fomkin@gmail.com>
- */
+  * @author Aleksey Fomkin <aleksey.fomkin@gmail.com>
+  */
 object AdviserSpec extends Specification {
 
   val rnd = new Random()
@@ -58,7 +58,7 @@ object AdviserSpec extends Specification {
       _ _ _ _ _ _ 4 _
     """
 
-    board.bestAdvice.get mustEqual Swap(Point(6,2), Point(5, 2))
+    board.bestAdvice.get mustEqual Swap(Point(6, 2), Point(5, 2))
   }
 
 }

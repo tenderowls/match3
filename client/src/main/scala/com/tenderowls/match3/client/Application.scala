@@ -10,24 +10,23 @@ import com.tenderowls.match3._
 import com.tenderowls.match3.client.components.BoardComponent
 import com.tenderowls.match3.client.components.BoardComponent.Rgb
 import com.tenderowls.match3.server.actors.LobbyActor
-import com.tenderowls.match3.server.data.{ColorCell, PlayerInfo, Score}
-import korolev.akkahttp._
-import korolev.execution._
+import com.tenderowls.match3.server.data.{ ColorCell, PlayerInfo, Score }
+import scala.concurrent.ExecutionContext.Implicits.global
 import korolev.server._
 import korolev.state.javaSerialization._
 import levsha.dsl._
 import levsha.dsl.html._
-
+import korolev.akka._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Random
+import korolev.akka.AkkaHttpServerConfig
 
 object Application extends App {
 
   import State.globalContext._
 
-  private implicit val actorSystem = ActorSystem("match3", defaultExecutionContext = Some(defaultExecutor))
-  private implicit val materializer: ActorMaterializer = ActorMaterializer()
+  private implicit val actorSystem = ActorSystem("match3")
   private implicit val askTimeout: Timeout = 1.second
   private implicit val akkaScheduler: actor.Scheduler = actorSystem.scheduler
 
@@ -67,9 +66,10 @@ object Application extends App {
     head = { _ =>
       Seq(
         link(href := "static/main.css", rel := "stylesheet", `type` := "text/css"),
-        meta(name :="viewport", content := "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"),
-        script(language := "javascript", src := "static/gestures.js")
-      )
+        meta(
+          name := "viewport",
+          content := "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"),
+        script(language := "javascript", src := "static/gestures.js"))
     },
     render = {
       case State.Login =>
@@ -83,121 +83,97 @@ object Application extends App {
 
         optimize {
           body(
-            div(display @= "flex",
+            div(
+              display @= "flex",
               alignItems @= "center",
               flexDirection @= "column",
               h3(textAlign @= "center", "Multiplayer match-three"),
-              h6(textAlign @= "center", fontStyle @= "italic",
+              h6(
+                textAlign @= "center",
+                fontStyle @= "italic",
                 "Written in Scala and Korolev by Aleksey Fomkin",
-                a(fontStyle @= "italic", display @= "block", href := "https://github.com/tenderowls/match3", "https://github.com/tenderowls/match3")
-              ),
-              form(clazz := "panel", marginTop @= "15px", display @= "flex",
+                a(
+                  fontStyle @= "italic",
+                  display @= "block",
+                  href := "https://github.com/tenderowls/match3",
+                  "https://github.com/tenderowls/match3")),
+              form(
+                clazz := "panel",
+                marginTop @= "15px",
+                display @= "flex",
                 input(nameInputId, `type` := "text", placeholder := "Your nickname"),
                 button("Enter lobby"),
-                event("submit")(onSubmit)
-              )
-            )
-          )
+                event("submit")(onSubmit))))
         }
       case State.LoggedIn(name, State.YouWin) =>
         optimize {
-          body(
-            div(clazz := "panel",
-              h2("You win! ❤️"),
-              enterLobbyButton(name)
-            )
-          )
+          body(div(clazz := "panel", h2("You win! ❤️"), enterLobbyButton(name)))
         }
 
       case State.LoggedIn(name, State.YouLose) =>
         optimize {
-          body(
-            div(clazz := "panel",
-              h2("You lose. \uD83D\uDCA9"),
-              enterLobbyButton(name)
-            )
-          )
+          body(div(clazz := "panel", h2("You lose. \uD83D\uDCA9"), enterLobbyButton(name)))
         }
 
       case State.LoggedIn(name, State.Draw) =>
         optimize {
-          body(
-            div(clazz := "panel",
-              h2("Draw"),
-              enterLobbyButton(name)
-            )
-          )
+          body(div(clazz := "panel", h2("Draw"), enterLobbyButton(name)))
         }
 
       case State.LoggedIn(_, State.Lobby) =>
         optimize {
           body(
-            div(clazz := "panel",
+            div(
+              clazz := "panel",
               h2("Looking for opponent..."),
-              div(
-                button(
-                  "Play with bot",
-                  event("click")(_.publish(ClientEvent.PlayWithBot))
-                )
-              )
-            )
-          )
+              div(button("Play with bot", event("click")(_.publish(ClientEvent.PlayWithBot))))))
         }
 
       case State.LoggedIn(_, State.Game(gameInfo, boardParams)) =>
-
         def moveIndicator(player: PlayerInfo, score: Score) = {
           val thisMove = gameInfo.currentPlayer == player
           optimize {
             div(
               clazz := (
-                if (thisMove) "move-indicator move-indicator__current"
-                else "move-indicator"
-                ),
+                    if (thisMove) "move-indicator move-indicator__current"
+                    else "move-indicator"
+                  ),
               div(
                 display @= "flex",
                 justifyContent @= "space-between",
                 player.name,
-                when(thisMove)(div(gameInfo.timeRemaining.map(s => s.toSeconds.toString)))
-              ),
-              renderScore(score)
-            )
+                when(thisMove)(div(gameInfo.timeRemaining.map(s => s.toSeconds.toString)))),
+              renderScore(score))
           }
         }
 
-        val board = BoardComponent.create(boardParams) { (access, event) =>
-          event match {
-            case BoardComponent.Event.Move(swap) =>
-              access.publish(ClientEvent.MakeMove(swap))
-            case BoardComponent.Event.AnimationEnd =>
-              access.publish(ClientEvent.SyncAnimation)
-            case BoardComponent.Event.AddScore(score) =>
-              access.maybeTransition {
-                case state@State.LoggedIn(_, game@State.Game(info, _)) if info.currentPlayer == info.you =>
-                  state.copy(state = game.copy(info = info.copy(yourScore = info.yourScore + score)))
-                case state@State.LoggedIn(_, game@State.Game(info, _)) if info.currentPlayer == info.opponent =>
-                  state.copy(state = game.copy(info = info.copy(opponentScore = info.opponentScore + score)))
-              }
-          }
+        val board = BoardComponent.create(boardParams) {
+          (access, event) =>
+            event match {
+              case BoardComponent.Event.Move(swap) =>
+                access.publish(ClientEvent.MakeMove(swap))
+              case BoardComponent.Event.AnimationEnd =>
+                access.publish(ClientEvent.SyncAnimation)
+              case BoardComponent.Event.AddScore(score) =>
+                access.maybeTransition {
+                  case state @ State.LoggedIn(_, game @ State.Game(info, _)) if info.currentPlayer == info.you =>
+                    state.copy(state = game.copy(info = info.copy(yourScore = info.yourScore + score)))
+                  case state @ State.LoggedIn(_, game @ State.Game(info, _)) if info.currentPlayer == info.opponent =>
+                    state.copy(state = game.copy(info = info.copy(opponentScore = info.opponentScore + score)))
+                }
+            }
         }
 
         optimize {
-          body(
-            delay(1.second) { access =>
-              access.maybeTransition {
-                case state@State.LoggedIn(_, game: State.Game) =>
-                  state.copy(state = game.copy(info = game.info.copy(timeRemaining = game.info.timeRemaining.map(_ - 1.second))))
-              }
-            },
-            div(clazz := "game",
-              moveIndicator(gameInfo.you, gameInfo.yourScore),
-              board,
-              moveIndicator(gameInfo.opponent, gameInfo.opponentScore)
-            )
-          )
+          body(delay(1.second) { access =>
+            access.maybeTransition {
+              case state @ State.LoggedIn(_, game: State.Game) =>
+                state.copy(
+                  state = game.copy(info = game.info.copy(timeRemaining = game.info.timeRemaining.map(_ - 1.second))))
+            }
+          }, div(clazz := "game", moveIndicator(gameInfo.you, gameInfo.yourScore), board, moveIndicator(gameInfo.opponent, gameInfo.opponentScore)))
         }
-    }
-  )
+    })
 
   private val route = akkaHttpService(serviceConfig).apply(AkkaHttpServerConfig())
 
@@ -214,21 +190,16 @@ object Application extends App {
       } yield ()
 
     optimize {
-      button(
-        "Enter lobby",
-        event("click")(onClick)
-      )
+      button("Enter lobby", event("click")(onClick))
     }
   }
 
   private def renderScore(score: Score): Node = optimize {
-    div(
-      score.data.map {
-        case (colorCell, count) =>
-          val color = BoardComponent.cellToColor(colorCell)
-          renderScoreLine(color, 3, count.toDouble / maxScore.toDouble)
-      }
-    )
+    div(score.data.map {
+      case (colorCell, count) =>
+        val color = BoardComponent.cellToColor(colorCell)
+        renderScoreLine(color, 3, count.toDouble / maxScore.toDouble)
+    })
   }
 
   private def renderScoreLine(color: Rgb, h: Int, progress: Double): Node = {
@@ -241,9 +212,7 @@ object Application extends App {
           clazz := "score-bar",
           width @= s"${Math.min(progress * 100, 100)}%",
           height @= s"${h}px",
-          backgroundColor @= color.toString
-        )
-      )
+          backgroundColor @= color.toString))
     }
   }
 }

@@ -44,10 +44,9 @@ object BoardSpec extends Specification {
 
   def horizontalMatch =
     board"0 0 1 1 2 2 2 0".matchedSequence.get.toSet mustEqual Set(
-      MatchedCell(Point(6, 0), IntCell(2)),
-      MatchedCell(Point(5, 0), IntCell(2)),
-      MatchedCell(Point(4, 0), IntCell(2))
-    )
+          MatchedCell(Point(6, 0), IntCell(2)),
+          MatchedCell(Point(5, 0), IntCell(2)),
+          MatchedCell(Point(4, 0), IntCell(2)))
 
   def verticalMatch = {
 
@@ -64,8 +63,7 @@ object BoardSpec extends Specification {
       MatchedCell(Point(2, 1), IntCell(1)),
       MatchedCell(Point(2, 2), IntCell(1)),
       MatchedCell(Point(2, 3), IntCell(1)),
-      MatchedCell(Point(2, 4), IntCell(1))
-    )
+      MatchedCell(Point(2, 4), IntCell(1)))
   }
 
   def doubleMatch = {
@@ -81,26 +79,23 @@ object BoardSpec extends Specification {
       Set(
         MatchedCell(Point(0, 0), IntCell(1)),
         MatchedCell(Point(0, 1), IntCell(1)),
-        MatchedCell(Point(0, 2), IntCell(1))
-      ),
+        MatchedCell(Point(0, 2), IntCell(1))),
       Set(
         MatchedCell(Point(0, 0), IntCell(1)),
         MatchedCell(Point(1, 0), IntCell(1)),
-        MatchedCell(Point(2, 0), IntCell(1))
-      )
-    )
+        MatchedCell(Point(2, 0), IntCell(1))))
   }
 
-  def separateOps(ops:List[BoardOperation]) = {
+  def separateOps(ops: List[BoardOperation]) = {
     val updates = ops filter {
-      case x: Update => true
-      case _ => false
-    }
+          case x: Update => true
+          case _         => false
+        }
 
     val transitions = ops filter {
-      case x: Transition => true
-      case _ => false
-    }
+          case x: Transition => true
+          case _             => false
+        }
     (updates.toSet, transitions)
   }
 
@@ -124,14 +119,12 @@ object BoardSpec extends Specification {
       Update(Point(2, 3), EmptyCell),
       Update(Point(2, 4), EmptyCell),
       Update(Point(2, 5), EmptyCell),
-      Update(Point(2, 6), EmptyCell)
-    )
+      Update(Point(2, 6), EmptyCell))
 
     ops._2 mustEqual List(
       Transition(Point(2, 2), Point(2, 6)),
       Transition(Point(2, 1), Point(2, 5)),
-      Transition(Point(2, 0), Point(2, 4))
-    )
+      Transition(Point(2, 0), Point(2, 4)))
   }
 
   def testSequenceOperationsCalculator2 = {
@@ -150,11 +143,7 @@ object BoardSpec extends Specification {
     val seq = board.matchedSequence.get
     val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
 
-    ops._1 mustEqual Set(
-      Update(Point(3, 2), EmptyCell),
-      Update(Point(4, 2), EmptyCell),
-      Update(Point(5, 2), EmptyCell)
-    )
+    ops._1 mustEqual Set(Update(Point(3, 2), EmptyCell), Update(Point(4, 2), EmptyCell), Update(Point(5, 2), EmptyCell))
 
     ops._2 mustEqual List(
       Transition(Point(5, 1), Point(5, 2)),
@@ -162,8 +151,7 @@ object BoardSpec extends Specification {
       Transition(Point(4, 1), Point(4, 2)),
       Transition(Point(4, 0), Point(4, 1)),
       Transition(Point(3, 1), Point(3, 2)),
-      Transition(Point(3, 0), Point(3, 1))
-    )
+      Transition(Point(3, 0), Point(3, 1)))
   }
 
   def testSequenceOperationsCalculator3 = {
@@ -182,18 +170,12 @@ object BoardSpec extends Specification {
     val seq = board.matchedSequence.get
     val ops = separateOps(board.calculateRemoveSequenceOperations(seq))
 
-    ops._1 mustEqual Set(
-      Update(Point(2, 4), EmptyCell),
-      Update(Point(2, 5), EmptyCell),
-      Update(Point(2, 6), EmptyCell)
-    )
+    ops._1 mustEqual Set(Update(Point(2, 4), EmptyCell), Update(Point(2, 5), EmptyCell), Update(Point(2, 6), EmptyCell))
 
-    ops._2 mustEqual List(
-      Transition(Point(2, 3), Point(2, 6))
-    )
+    ops._2 mustEqual List(Transition(Point(2, 3), Point(2, 6)))
   }
 
-  def testApplyOperations(board:Board, expect:Board) = {
+  def testApplyOperations(board: Board, expect: Board) = {
     val seq = board.matchedSequence.get
     val ops = board.calculateRemoveSequenceOperations(seq)
     val newBoard = board.applyOperations(ops)
@@ -220,8 +202,7 @@ object BoardSpec extends Specification {
       8 7 6 5 4 3 2 1
       1 2 3 4 5 6 7 8
       8 7 6 5 4 3 2 1
-    """
-  )
+    """)
 
   def testApplyOperations2 = testApplyOperations(
     board = board"""
@@ -243,8 +224,7 @@ object BoardSpec extends Specification {
       8 7 6 5 4 3 2 1
       1 2 5 4 5 6 7 8
       8 7 6 5 4 3 2 1
-    """
-  )
+    """)
 
   def testApplyOperations3 = testApplyOperations(
     board = board"""
@@ -266,6 +246,5 @@ object BoardSpec extends Specification {
       8 7 * 5 4 3 2 1
       1 2 6 4 5 6 7 8
       8 7 6 5 4 3 2 1
-    """
-  )
+    """)
 }

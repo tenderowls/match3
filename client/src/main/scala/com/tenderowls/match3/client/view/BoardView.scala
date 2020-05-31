@@ -1,10 +1,5 @@
 package com.tenderowls.match3.client.view
 
-class BoardView {
+class BoardView {}
 
-}
-
-object BoardView {
-
-
-}
+object BoardView {}

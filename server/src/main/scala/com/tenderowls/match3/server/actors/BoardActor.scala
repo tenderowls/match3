@@ -2,8 +2,8 @@ package com.tenderowls.match3.server.actors
 
 import akka.actor.typed._
 import akka.actor.typed.scaladsl.Behaviors
-import com.tenderowls.match3.server.data.{ColorCell, Score}
-import com.tenderowls.match3.BoardOperation.{Swap, Update}
+import com.tenderowls.match3.server.data.{ ColorCell, Score }
+import com.tenderowls.match3.BoardOperation.{ Swap, Update }
 import com.tenderowls.match3._
 
 object BoardActor {
@@ -25,14 +25,13 @@ object BoardActor {
                 acc = acc :+ removeOps :+ transitOps,
                 board = board.applyOperations(ops),
                 score = score + removeOps.foldLeft(Score.empty) {
-                  case (total, BoardOperation.Update(point, Cell.EmptyCell)) =>
-                    board.get(point).fold(total) {
-                      case cell: ColorCell => total.inc(cell)
-                      case _ => total
-                    }
-                  case (total, _) => total
-                }
-              )
+                        case (total, BoardOperation.Update(point, Cell.EmptyCell)) =>
+                          board.get(point).fold(total) {
+                            case cell: ColorCell => total.inc(cell)
+                            case _               => total
+                          }
+                        case (total, _) => total
+                      })
           }
         }
         aux(Nil, Score.empty, board.applyOperations(swapOperation))
@@ -43,25 +42,24 @@ object BoardActor {
           val ops = resultBoard
             .mapData {
               case (p, i) if resultBoard.rawData(i) == Cell.EmptyCell => Some(p)
-              case _ => None
+              case _                                                  => None
             }
             .toList
             .flatten
-            .map { p => Update(p, rules.randomValue) }
+            .map { p =>
+              Update(p, rules.randomValue)
+            }
 
           // Test board is stable (no matched sequences)
           resultBoard.applyOperations(ops).matchedSequence match {
             case None => ops
-            case _ => aux()
+            case _    => aux()
           }
         }
         aux()
       }
 
-      Result(
-        swapOperation +: resultOperations :+ fillOperations,
-        score
-      )
+      Result(swapOperation +: resultOperations :+ fillOperations, score)
     }
 
     Behaviors.receive {

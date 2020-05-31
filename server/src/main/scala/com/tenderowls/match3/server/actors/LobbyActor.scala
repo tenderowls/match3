@@ -1,8 +1,8 @@
 package com.tenderowls.match3.server.actors
 
-import akka.actor.typed.{Behavior, Terminated}
+import akka.actor.typed.{ Behavior, Terminated }
 import akka.actor.typed.scaladsl.Behaviors
-import com.tenderowls.match3.{BoardGenerator, Rules}
+import com.tenderowls.match3.{ BoardGenerator, Rules }
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Random

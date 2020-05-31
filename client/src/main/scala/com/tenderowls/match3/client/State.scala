@@ -1,10 +1,10 @@
 package com.tenderowls.match3.client
 
-import com.tenderowls.match3.server.data.{PlayerInfo, Score}
+import com.tenderowls.match3.server.data.{ PlayerInfo, Score }
 import com.tenderowls.match3.client.components.BoardComponent.Params
 import korolev._
 import korolev.state.javaSerialization._
-import korolev.execution._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -24,13 +24,12 @@ object State {
   case object Draw extends LoggedInState
 
   case class GameInfo(
-    currentPlayer: PlayerInfo,
-    you: PlayerInfo,
-    opponent: PlayerInfo,
-    yourScore: Score,
-    opponentScore: Score,
-    timeRemaining: Option[FiniteDuration]
-  )
+      currentPlayer: PlayerInfo,
+      you: PlayerInfo,
+      opponent: PlayerInfo,
+      yourScore: Score,
+      opponentScore: Score,
+      timeRemaining: Option[FiniteDuration])
 
   val globalContext = Context[Future, State, ClientEvent]
 }

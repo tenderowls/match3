@@ -2,35 +2,32 @@ package com.tenderowls.match3.client
 
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.Behaviors
-import akka.actor.typed.{ActorRef, Behavior, Terminated}
-import akka.actor.{ActorSystem, Scheduler}
+import akka.actor.typed.{ ActorRef, Behavior, Terminated }
+import akka.actor.{ ActorSystem, Scheduler }
 import akka.util.Timeout
 import com.tenderowls.match3.client.State.GameInfo
 import com.tenderowls.match3.client.components.BoardComponent
 import com.tenderowls.match3.server.actors._
-import com.tenderowls.match3.server.data.{PlayerInfo, Score}
-import com.tenderowls.match3.{BoardGenerator, BoardOperation, Rules}
-import korolev.execution.defaultExecutor
-import korolev.{Context, Extension}
+import com.tenderowls.match3.server.data.{ PlayerInfo, Score }
+import com.tenderowls.match3.{ BoardGenerator, BoardOperation, Rules }
+import scala.concurrent.ExecutionContext.Implicits.global
+import korolev.{ Context, Extension }
 import akka.actor.typed.scaladsl.adapter._
-
+import akka.util.Timeout
 import scala.collection.immutable.Queue
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-final class PlayerProxyExtension(lobby: Lobby,
-                                 rules: Rules,
-                                 gameTimeout: FiniteDuration,
-                                 maxScore: Int)
-                                (implicit actorSystem: ActorSystem,
-                                 scheduler: Scheduler) extends Extension[Future, State, ClientEvent] {
+final class PlayerProxyExtension(lobby: Lobby, rules: Rules, gameTimeout: FiniteDuration, maxScore: Int)(
+    implicit actorSystem: ActorSystem,
+    scheduler: Scheduler)
+    extends Extension[Future, State, ClientEvent] {
 
   type Access = Context.BaseAccess[Future, State, ClientEvent]
 
   class Actors(playerId: String, access: Access)(implicit scheduler: Scheduler) {
 
     type Proxy = ActorRef[ClientEvent]
-
     object Proxy {
 
       // We can't create a PlayerActor because we don't know
@@ -42,7 +39,7 @@ final class PlayerProxyExtension(lobby: Lobby,
             Proxy(playerName)
           case (ctx, event) =>
             ctx.log.error(s"Unexpected client event $event in default state")
-            Behavior.stopped
+            Behaviors.stopped
         }
 
       // Now when we know player name,
@@ -99,7 +96,10 @@ final class PlayerProxyExtension(lobby: Lobby,
 
       def apply(player: Player, game: Game): Behavior[Event] = Behaviors.setup { ctx =>
         def aux(animated: Boolean, queue: Queue[Batch]): Behavior[Event] =
-          default orElse Behaviors.receiveMessage {
+          Behaviors.receiveMessage {
+            case Event.InGame(player, game) =>
+              apply(player, game)
+
             case Event.MakeMove(swap) =>
               game ! GameActor.Event.MakeMove(player, swap)
               Behaviors.same
@@ -134,18 +134,19 @@ final class PlayerProxyExtension(lobby: Lobby,
     }
 
     /**
-     * Actor transforms application state according to player events.
-     *
-     * Lifecycle:
-     *   Start -> WhatsYourName, GameStarted)
-     *         -> SyncAnimation, MoveResult, CurrentScore,
-     *            YourTurn, OpponentTurn, WhatsYourName,
-     *    Stop <- YouWin, YouLose, Draw, EndOfTurn
-     */
-    def Player(playerName: String,
-               access: Access,
-               mediator: PlayerMediator)
-              (implicit scheduler: Scheduler): Behavior[PlayerActor.Event] = Behaviors.setup { ctx =>
+      * Actor transforms application state according to player events.
+      *
+      * Lifecycle:
+      *   Start -> WhatsYourName, GameStarted)
+      *         -> SyncAnimation, MoveResult, CurrentScore,
+      *            YourTurn, OpponentTurn, WhatsYourName,
+      *    Stop <- YouWin, YouLose, Draw, EndOfTurn
+      */
+    def Player(playerName: String, access: Access, mediator: PlayerMediator)(
+        implicit scheduler: Scheduler): Behavior[PlayerActor.Event] = Behaviors.setup { ctx =>
+      implicit val akkaScheduler: akka.actor.typed.Scheduler = actorSystem.scheduler.toTyped
+
+      implicit val timeout: Timeout = 3.seconds
 
       val playerRespondNameBehavior: Behavior[PlayerActor.Event] =
         Behaviors.receiveMessage {
@@ -161,21 +162,27 @@ final class PlayerProxyExtension(lobby: Lobby,
         }
 
       lazy val playerAwaitGameBehavior: Behavior[PlayerActor.Event] =
-        playerRespondNameBehavior orElse Behaviors.receiveMessagePartial {
+        Behaviors.receiveMessagePartial {
+          case PlayerActor.Event.WhatsYourName(replyTo) =>
+            replyTo ! playerName
+            Behaviors.same
+          case _: PlayerActor.Event.CurrentScore =>
+            // Ignore score event.
+            // For the view score accruing synchronized with animation.
+            Behaviors.same
+
           case PlayerActor.Event.GameStarted(yourTurn, board, gameRef, opponent) =>
             implicit val timeout: Timeout = Timeout(5.seconds)
-            opponent
-              .ask(PlayerActor.Event.WhatsYourName)
-              .map { opponentName: String =>
-                transformState { _ =>
-                  val you = PlayerInfo(playerName)
-                  val enemy = PlayerInfo(opponentName)
-                  val currentPlayer = if (yourTurn) you else enemy
-                  val info = GameInfo(currentPlayer, you, enemy, Score.empty, Score.empty, None)
-                  val params = BoardComponent.Params(board, Nil, 0)
-                  State.Game(info, params)
-                }
+            opponent.ask(PlayerActor.Event.WhatsYourName).map { opponentName: String =>
+              transformState { _ =>
+                val you = PlayerInfo(playerName)
+                val enemy = PlayerInfo(opponentName)
+                val currentPlayer = if (yourTurn) you else enemy
+                val info = GameInfo(currentPlayer, you, enemy, Score.empty, Score.empty, None)
+                val params = BoardComponent.Params(board, Nil, 0)
+                State.Game(info, params)
               }
+            }
             mediator ! PlayerMediator.Event.InGame(ctx.self, gameRef)
             playerInGameBehavior(gameRef)
           case event =>
@@ -184,7 +191,16 @@ final class PlayerProxyExtension(lobby: Lobby,
         }
 
       def playerInGameBehavior(game: Game): Behavior[PlayerActor.Event] =
-        playerRespondNameBehavior orElse Behaviors.receiveMessagePartial {
+        Behaviors.receiveMessagePartial {
+
+          case PlayerActor.Event.WhatsYourName(replyTo) =>
+            replyTo ! playerName
+            Behaviors.same
+          case _: PlayerActor.Event.CurrentScore =>
+            // Ignore score event.
+            // For the view score accruing synchronized with animation.
+            Behaviors.same
+
           case PlayerActor.Event.MoveResult(batch) =>
             mediator ! PlayerMediator.Event.MoveResult(batch)
             Behaviors.same
@@ -236,10 +252,7 @@ final class PlayerProxyExtension(lobby: Lobby,
 
     private def applyBatch(batch: Batch) = transformGameState {
       case state @ State.Game(_, params) =>
-        val updatedParams = params.copy(
-          animationNumber = params.animationNumber + 1,
-          batch = batch
-        )
+        val updatedParams = params.copy(animationNumber = params.animationNumber + 1, batch = batch)
         state.copy(boardParams = updatedParams)
       // TODO error state
     }
@@ -247,15 +260,14 @@ final class PlayerProxyExtension(lobby: Lobby,
 
   def setup(access: Access): Future[Extension.Handlers[Future, State, ClientEvent]] = {
     access.sessionId.map { qsi =>
-      val id = s"${qsi.deviceId}-${qsi.id}"
+      val id = s"${qsi.deviceId}-${qsi.sessionId}"
       val actors = new Actors(id, access)
       val proxy = actorSystem.spawnAnonymous(actors.Proxy(access))
       Extension.Handlers(
         onDestroy = () => Future.successful(actorSystem.stop(proxy.toClassic)),
         onMessage = clientEvent => {
           Future.successful(proxy ! clientEvent)
-        }
-      )
+        })
     }
   }
 }
