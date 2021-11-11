@@ -3,20 +3,21 @@ package com.tenderowls.match3.client
 import akka.actor.typed.scaladsl.AskPattern._
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior, Terminated}
-import akka.actor.{ActorSystem, Scheduler}
+import akka.actor.{ActorSystem}
+import akka.actor.typed.Scheduler
 import akka.util.Timeout
 import com.tenderowls.match3.client.State.GameInfo
 import com.tenderowls.match3.client.components.BoardComponent
 import com.tenderowls.match3.server.actors._
 import com.tenderowls.match3.server.data.{PlayerInfo, Score}
 import com.tenderowls.match3.{BoardGenerator, BoardOperation, Rules}
-import korolev.execution.defaultExecutor
 import korolev.{Context, Extension}
 import akka.actor.typed.scaladsl.adapter._
 
 import scala.collection.immutable.Queue
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
 final class PlayerProxyExtension(lobby: Lobby,
                                  rules: Rules,
@@ -42,14 +43,14 @@ final class PlayerProxyExtension(lobby: Lobby,
             Proxy(playerName)
           case (ctx, event) =>
             ctx.log.error(s"Unexpected client event $event in default state")
-            Behavior.stopped
+            Behaviors.stopped
         }
 
       // Now when we know player name,
       // we can create player actor
       def apply(playerName: String): Behavior[ClientEvent] =
         Behaviors.setup { ctx =>
-          val mediator = ctx.spawnAnonymous(PlayerMediator.default)
+          val mediator = ctx.spawnAnonymous(Behaviors.receiveMessagePartial(PlayerMediator.default))
           val player = ctx.spawn(Player(playerName, access, mediator), playerId)
           lobby ! LobbyActor.Event.Enter(player)
           ctx.watch(player) // Looking if player actor is stopped
@@ -90,35 +91,35 @@ final class PlayerProxyExtension(lobby: Lobby,
 
     object PlayerMediator {
 
-      val default: Behavior[Event] =
-        Behaviors.receiveMessage {
+      val default: PartialFunction[Event, Behavior[Event]] = {
           case Event.InGame(player, game) =>
             apply(player, game)
-          case _ => Behaviors.unhandled
         }
 
       def apply(player: Player, game: Game): Behavior[Event] = Behaviors.setup { ctx =>
         def aux(animated: Boolean, queue: Queue[Batch]): Behavior[Event] =
-          default orElse Behaviors.receiveMessage {
-            case Event.MakeMove(swap) =>
-              game ! GameActor.Event.MakeMove(player, swap)
-              Behaviors.same
-            case Event.MoveResult(batch) if animated =>
-              aux(animated = true, queue.enqueue(batch))
-            case Event.MoveResult(batch) if !animated =>
-              applyBatch(batch)
-              aux(animated = true, Queue.empty)
-            case Event.SyncAnimation if queue.nonEmpty =>
-              val (batch, tl) = queue.dequeue
-              applyBatch(batch)
-              game ! GameActor.Event.AnimationFinished
-              aux(animated, tl)
-            case Event.SyncAnimation =>
-              game ! GameActor.Event.AnimationFinished
-              aux(animated = false, Queue.empty)
-            case event =>
-              ctx.log.error(s"Unexpected $event. Already initialized.")
-              Behaviors.stopped
+          Behaviors.receiveMessage {
+            default orElse {
+              case Event.MakeMove(swap) =>
+                game ! GameActor.Event.MakeMove(player, swap)
+                Behaviors.same
+              case Event.MoveResult(batch) if animated =>
+                aux(animated = true, queue.enqueue(batch))
+              case Event.MoveResult(batch) if !animated =>
+                applyBatch(batch)
+                aux(animated = true, Queue.empty)
+              case Event.SyncAnimation if queue.nonEmpty =>
+                val (batch, tl) = queue.dequeue
+                applyBatch(batch)
+                game ! GameActor.Event.AnimationFinished
+                aux(animated, tl)
+              case Event.SyncAnimation =>
+                game ! GameActor.Event.AnimationFinished
+                aux(animated = false, Queue.empty)
+              case event =>
+                ctx.log.error(s"Unexpected $event. Already initialized.")
+                Behaviors.stopped
+            }
           }
         aux(animated = false, Queue.empty)
       }
@@ -147,8 +148,7 @@ final class PlayerProxyExtension(lobby: Lobby,
                mediator: PlayerMediator)
               (implicit scheduler: Scheduler): Behavior[PlayerActor.Event] = Behaviors.setup { ctx =>
 
-      val playerRespondNameBehavior: Behavior[PlayerActor.Event] =
-        Behaviors.receiveMessage {
+      val playerRespondNameBehavior: PartialFunction[PlayerActor.Event, Behavior[PlayerActor.Event]] = {
           case PlayerActor.Event.WhatsYourName(replyTo) =>
             replyTo ! playerName
             Behaviors.same
@@ -156,65 +156,68 @@ final class PlayerProxyExtension(lobby: Lobby,
             // Ignore score event.
             // For the view score accruing synchronized with animation.
             Behaviors.same
-          case _ =>
-            Behaviors.unhandled
         }
 
-      lazy val playerAwaitGameBehavior: Behavior[PlayerActor.Event] =
-        playerRespondNameBehavior orElse Behaviors.receiveMessagePartial {
-          case PlayerActor.Event.GameStarted(yourTurn, board, gameRef, opponent) =>
-            implicit val timeout: Timeout = Timeout(5.seconds)
-            opponent
-              .ask(PlayerActor.Event.WhatsYourName)
-              .map { opponentName: String =>
-                transformState { _ =>
-                  val you = PlayerInfo(playerName)
-                  val enemy = PlayerInfo(opponentName)
-                  val currentPlayer = if (yourTurn) you else enemy
-                  val info = GameInfo(currentPlayer, you, enemy, Score.empty, Score.empty, None)
-                  val params = BoardComponent.Params(board, Nil, 0)
-                  State.Game(info, params)
+      lazy val playerAwaitGameBehavior: Behavior[PlayerActor.Event] = Behaviors.setup { ctx =>
+        Behaviors.receiveMessagePartial {
+          playerRespondNameBehavior orElse {
+            case PlayerActor.Event.GameStarted(yourTurn, board, gameRef, opponent) =>
+              implicit val timeout: Timeout = Timeout(5.seconds)
+              opponent
+                .ask(PlayerActor.Event.WhatsYourName)
+                .map { opponentName: String =>
+                  transformState { _ =>
+                    val you = PlayerInfo(playerName)
+                    val enemy = PlayerInfo(opponentName)
+                    val currentPlayer = if (yourTurn) you else enemy
+                    val info = GameInfo(currentPlayer, you, enemy, Score.empty, Score.empty, None)
+                    val params = BoardComponent.Params(board, Nil, 0)
+                    State.Game(info, params)
+                  }
                 }
-              }
-            mediator ! PlayerMediator.Event.InGame(ctx.self, gameRef)
-            playerInGameBehavior(gameRef)
-          case event =>
-            ctx.log.error(s"Unexpected $event in playerAwaitGameBehavior")
-            Behaviors.stopped
+              mediator ! PlayerMediator.Event.InGame(ctx.self, gameRef)
+              playerInGameBehavior(gameRef)
+            case event =>
+              ctx.log.error(s"Unexpected $event in playerAwaitGameBehavior")
+              Behaviors.stopped
+          }
         }
+      }
 
       def playerInGameBehavior(game: Game): Behavior[PlayerActor.Event] =
-        playerRespondNameBehavior orElse Behaviors.receiveMessagePartial {
-          case PlayerActor.Event.MoveResult(batch) =>
-            mediator ! PlayerMediator.Event.MoveResult(batch)
-            Behaviors.same
-          case PlayerActor.Event.YouWin =>
-            transformState(_ => State.YouWin)
-            playerAwaitGameBehavior
-          case PlayerActor.Event.Draw =>
-            transformState(_ => State.Draw)
-            playerAwaitGameBehavior
-          case PlayerActor.Event.YouLose =>
-            transformState(_ => State.YouLose)
-            playerAwaitGameBehavior
-          case PlayerActor.Event.YourTurn(time) =>
-            transformGameState { game =>
-              val updatedInfo = game.info.copy(currentPlayer = game.info.you, timeRemaining = Some(time))
-              game.copy(info = updatedInfo)
-            }
-            Behaviors.same
-          case PlayerActor.Event.OpponentTurn(time) =>
-            transformGameState { game =>
-              val updatedInfo = game.info.copy(currentPlayer = game.info.opponent, timeRemaining = Some(time))
-              game.copy(info = updatedInfo)
-            }
-            Behaviors.same
-          case PlayerActor.Event.EndOfTurn =>
-            transformGameState { game =>
-              val updatedInfo = game.info.copy(timeRemaining = None)
-              game.copy(info = updatedInfo)
-            }
-            Behaviors.same
+        Behaviors.receiveMessagePartial {
+          playerRespondNameBehavior orElse {
+            case PlayerActor.Event.MoveResult(batch) =>
+              mediator ! PlayerMediator.Event.MoveResult(batch)
+              Behaviors.same
+            case PlayerActor.Event.YouWin =>
+              transformState(_ => State.YouWin)
+              playerAwaitGameBehavior
+            case PlayerActor.Event.Draw =>
+              transformState(_ => State.Draw)
+              playerAwaitGameBehavior
+            case PlayerActor.Event.YouLose =>
+              transformState(_ => State.YouLose)
+              playerAwaitGameBehavior
+            case PlayerActor.Event.YourTurn(time) =>
+              transformGameState { game =>
+                val updatedInfo = game.info.copy(currentPlayer = game.info.you, timeRemaining = Some(time))
+                game.copy(info = updatedInfo)
+              }
+              Behaviors.same
+            case PlayerActor.Event.OpponentTurn(time) =>
+              transformGameState { game =>
+                val updatedInfo = game.info.copy(currentPlayer = game.info.opponent, timeRemaining = Some(time))
+                game.copy(info = updatedInfo)
+              }
+              Behaviors.same
+            case PlayerActor.Event.EndOfTurn =>
+              transformGameState { game =>
+                val updatedInfo = game.info.copy(timeRemaining = None)
+                game.copy(info = updatedInfo)
+              }
+              Behaviors.same
+          }
         }
 
       playerAwaitGameBehavior
@@ -247,7 +250,7 @@ final class PlayerProxyExtension(lobby: Lobby,
 
   def setup(access: Access): Future[Extension.Handlers[Future, State, ClientEvent]] = {
     access.sessionId.map { qsi =>
-      val id = s"${qsi.deviceId}-${qsi.id}"
+      val id = s"${qsi.deviceId}-${qsi.sessionId}"
       val actors = new Actors(id, access)
       val proxy = actorSystem.spawnAnonymous(actors.Proxy(access))
       Extension.Handlers(

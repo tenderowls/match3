@@ -5,10 +5,10 @@ import com.tenderowls.match3.BoardOperation.{Swap, Transition, Update}
 import com.tenderowls.match3.Cell.EmptyCell
 import com.tenderowls.match3.{Board, BoardOperation, Cell, Direction, Point}
 import korolev.Component
+import korolev.effect.Effect
+import korolev.effect.syntax._
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
-import korolev.execution._
 import korolev.state.javaSerialization._
 import levsha.dsl._
 import html._
@@ -69,7 +69,7 @@ object BoardComponent {
 
   val animationState = AttrDef("animation-state")
 
-  val create: Component[Future, State, Params, Event] = Component[Future, State, Params, Event](State.Static(None, None, 0)) { (context, parameters, state) =>
+  def prepare[F[_]: Effect]: Component[F, State, Params, Event] = Component[F, State, Params, Event](State.Static(None, None, 0)) { (context, parameters, state) =>
 
     import BoardViewConfig.default._
     import context.{Event => DomEvent, _}
@@ -129,7 +129,7 @@ object BoardComponent {
 
     def renderAnimatedBoard(board: Board,
                             ops: List[BoardOperation])
-                           (onAnimationEnd: Access => Future[Unit]) = optimize {
+                           (onAnimationEnd: Access => F[Unit]) = optimize {
       div(
         clazz := "board",
         // Fake circle need to track transition end
@@ -154,9 +154,9 @@ object BoardComponent {
                           selectedCellOpt: Option[Point],
                           circleClass: Option[String],
                           bindings: Seq[Binding] = Nil)
-                         (cellClick: Point => Option[Access => Future[Unit]],
-                          cellSwipe: (Point, Swipe) => Option[Access => Future[Unit]],
-                          onAnimationEnd: Option[Access => Future[Unit]]) = {
+                         (cellClick: Point => Option[Access => F[Unit]],
+                          cellSwipe: (Point, Swipe) => Option[Access => F[Unit]],
+                          onAnimationEnd: Option[Access => F[Unit]]) = {
 
       def renderStaticCell(point: Point, cell: Cell) = {
         val clickHandler = cellClick(point)
@@ -280,7 +280,7 @@ object BoardComponent {
           for {
             qsid <- access.sessionId
             _ = println(s"${qsid.deviceId.take(4)}: transition end (remove or add circles ${batch.length}")
-            _ <- if (score.sum > 0) access.publish(Event.AddScore(score)) else Future.unit
+            _ <- if (score.sum > 0) access.publish(Event.AddScore(score)) else Effect[F].unit
             _ <- access.transition(_ => State.AnimationEnd(an, newBoard, batch))
           } yield ()
         }

@@ -4,7 +4,6 @@ import com.tenderowls.match3.server.data.{PlayerInfo, Score}
 import com.tenderowls.match3.client.components.BoardComponent.Params
 import korolev._
 import korolev.state.javaSerialization._
-import korolev.execution._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration

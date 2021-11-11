@@ -11,8 +11,7 @@ import com.tenderowls.match3.client.components.BoardComponent
 import com.tenderowls.match3.client.components.BoardComponent.Rgb
 import com.tenderowls.match3.server.actors.LobbyActor
 import com.tenderowls.match3.server.data.{ColorCell, PlayerInfo, Score}
-import korolev.akkahttp._
-import korolev.execution._
+import korolev.akka._
 import korolev.server._
 import korolev.state.javaSerialization._
 import levsha.dsl._
@@ -25,11 +24,13 @@ import scala.util.Random
 object Application extends App {
 
   import State.globalContext._
+  import scala.concurrent.ExecutionContext.Implicits.global
 
-  private implicit val actorSystem = ActorSystem("match3", defaultExecutionContext = Some(defaultExecutor))
+  private implicit val actorSystem = ActorSystem("match3", defaultExecutionContext = Some(global))
   private implicit val materializer: ActorMaterializer = ActorMaterializer()
   private implicit val askTimeout: Timeout = 1.second
-  private implicit val akkaScheduler: actor.Scheduler = actorSystem.scheduler
+  private val typedSystem = actorSystem.toTyped
+  private implicit val akkaScheduler = typedSystem.scheduler
 
   final val side = 9
   final val gameTimeout = 30.seconds
@@ -60,6 +61,7 @@ object Application extends App {
   private val nameInputId = elementId()
 
   val playerProxyExtension = new PlayerProxyExtension(lobby, boardRules, gameTimeout, maxScore)
+  val FutureBoardComponent = BoardComponent.prepare[Future]
 
   private val serviceConfig = KorolevServiceConfig[Future, State, ClientEvent](
     stateLoader = StateLoader.default(State.Login: State),
@@ -165,7 +167,7 @@ object Application extends App {
           }
         }
 
-        val board = BoardComponent.create(boardParams) { (access, event) =>
+        val board = FutureBoardComponent(boardParams) { (access, event) =>
           event match {
             case BoardComponent.Event.Move(swap) =>
               access.publish(ClientEvent.MakeMove(swap))

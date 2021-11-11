@@ -1,10 +1,13 @@
-val akkaVersion = "2.5.26"
-val korolevVersion = "0.14.0"
+val akkaVersion = "2.6.17"
+val korolevVersion = "1.1.0"
+
+name := "match3"
+
 val commonSettings = Seq(
   scalacOptions ++= Seq("-Yrangepos", "-deprecation"),
   organization := "com.tenderowls",
   version      := "1.0.0-SNAPSHOT",
-  scalaVersion := "2.13.1"
+  scalaVersion := "2.13.7"
 )
 
 lazy val match3 = project
@@ -16,6 +19,7 @@ lazy val match3 = project
 lazy val server = project
   .settings(commonSettings:_*)
   .settings(
+    name := "match3-server",
     libraryDependencies ++= Seq(
       "com.typesafe.akka" %% "akka-stream" % akkaVersion,
       "com.typesafe.akka" %% "akka-actor-typed" % akkaVersion
@@ -24,24 +28,35 @@ lazy val server = project
   .dependsOn(match3)
 
 lazy val client = project
+  .settings(commonSettings:_*)
+  .settings(
+    name := "match3-client",
+    libraryDependencies ++= Seq(
+      "org.fomkin" %% "korolev" % korolevVersion,
+    )
+  )
+  .dependsOn(server)
+
+lazy val standalone = project
   .enablePlugins(UniversalPlugin)
   .enablePlugins(AshScriptPlugin)
   .enablePlugins(DockerPlugin)
   .settings(commonSettings:_*)
   .settings(
+    dockerBaseImage := "adoptopenjdk",
     packageName in Docker := "match3",
-    version in Docker := "1.0.0",
+    version in Docker := "1.1.0",
     maintainer in Docker := "Aleksey Fomkin <aleksey.fomkin@gmail.com>",
     dockerExposedPorts := Seq(8080),
     dockerUsername := Some("fomkin"),
     dockerUpdateLatest := true,
-    normalizedName := "match3-client",
+    name := "match3-standalone",
     libraryDependencies ++= Seq(
-      "com.github.fomkin" %% "korolev-server-akkahttp" % korolevVersion,
+      "org.fomkin" %% "korolev-akka" % korolevVersion,
       "org.slf4j" % "slf4j-simple" % "1.7.+"
     )
   )
-  .dependsOn(server)
+  .dependsOn(client)
 
 lazy val root = project.in(file("."))
-  .aggregate(match3, server, client)
+  .aggregate(match3, server, client, standalone)
